@@ -8,15 +8,14 @@ import os
 import signal
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import grpc
 from loguru import logger
 
-from mini_vllm_proto import main_process_pb2
-from mini_vllm_proto import main_process_pb2_grpc
-from mini_vllm_proto import request_handler_pb2
-from mini_vllm_proto import request_handler_pb2_grpc
+from proto_loader import ProtoModules
+from proto_loader import generate_proto_modules
 
 
 DEFAULT_REPOSITORY = Path(__file__).resolve().parent.parent / "mini-vllm-rs"
@@ -72,11 +71,11 @@ def create_channel(socket_path: Path) -> grpc.Channel:
     )
 
 
-def send_shutdown() -> None:
+def send_shutdown(proto: ProtoModules) -> None:
     with create_channel(CONTROL_SOCKET) as channel:
-        client = main_process_pb2_grpc.MainProcessServiceStub(channel)
+        client = proto.main_process_grpc.MainProcessServiceStub(channel)
         client.Shutdown(
-            main_process_pb2.Shutdown(),
+            proto.main_process.Shutdown(),
             timeout=SHUTDOWN_TIMEOUT_SECONDS,
         )
 
@@ -99,11 +98,11 @@ def format_tokens_per_second(token_count: int, duration_ms: int) -> str:
     return f"{token_count * 1000 / duration_ms:.2f}"
 
 
-def send_example(process: subprocess.Popen[bytes]) -> None:
+def send_example(process: subprocess.Popen[bytes], proto: ProtoModules) -> None:
     with create_channel(REQUEST_SOCKET) as channel:
         wait_for_server(process, channel)
-        client = request_handler_pb2_grpc.RequestHandlerServiceStub(channel)
-        request = request_handler_pb2.GenerateText(
+        client = proto.request_handler_grpc.RequestHandlerServiceStub(channel)
+        request = proto.request_handler.GenerateText(
             prompt=EXAMPLE_PROMPT,
             max_new_tokens=1024,
             repeat_penalty=1.1,
@@ -149,9 +148,9 @@ def send_example(process: subprocess.Popen[bytes]) -> None:
             logger.warning("Generation ended without final statistics")
 
 
-def stop_server(process: subprocess.Popen[bytes]) -> int:
+def stop_server(process: subprocess.Popen[bytes], proto: ProtoModules) -> int:
     try:
-        send_shutdown()
+        send_shutdown(proto)
     except Exception as error:
         try:
             return process.wait(timeout=SHUTDOWN_TIMEOUT_SECONDS)
@@ -171,27 +170,29 @@ def main() -> int:
             "Use --repo_path to provide its location."
         )
 
-    logger.info("Launching mini-vllm-rs")
-    try:
-        process = subprocess.Popen(
-            build_command(args),
-            cwd=repository,
-            start_new_session=True,
-        )
-    except FileNotFoundError as error:
-        raise SystemExit(
-            "Could not start mini-vllm-rs because Cargo is not installed or is not on PATH."
-        ) from error
+    with tempfile.TemporaryDirectory(prefix="mini-vllm-eval-proto-") as directory:
+        proto = generate_proto_modules(repository, Path(directory))
+        logger.info("Launching mini-vllm-rs")
+        try:
+            process = subprocess.Popen(
+                build_command(args),
+                cwd=repository,
+                start_new_session=True,
+            )
+        except FileNotFoundError as error:
+            raise SystemExit(
+                "Could not start mini-vllm-rs because Cargo is not installed or is not on PATH."
+            ) from error
 
-    try:
-        send_example(process)
-        return process.wait()
-    except KeyboardInterrupt:
-        logger.info("Stopping mini-vllm-rs")
-        return stop_server(process)
-    except Exception as error:
-        logger.error("Example request failed: {}", error)
-        return stop_server(process)
+        try:
+            send_example(process, proto)
+            return process.wait()
+        except KeyboardInterrupt:
+            logger.info("Stopping mini-vllm-rs")
+            return stop_server(process, proto)
+        except Exception as error:
+            logger.error("Example request failed: {}", error)
+            return stop_server(process, proto)
 
 
 if __name__ == "__main__":

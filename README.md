@@ -32,7 +32,9 @@ python3 launch_mini_vllm.py --use_gpu
 
 The launcher waits for mini-vllm to become ready, sends an example text
 generation request, and streams the response and performance statistics to the
-terminal. The server remains running afterward.
+terminal. It generates its Python gRPC clients from the protocol definitions in
+`mini-vllm-rs` at launch, keeping the Rust project as the single source of
+truth. The server remains running afterward.
 
 Press Ctrl-C to gracefully stop mini-vllm and all of its processes.
 
