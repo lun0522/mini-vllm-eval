@@ -30,6 +30,10 @@ Use the GPU:
 python3 launch_mini_vllm.py --use_gpu
 ```
 
+The launcher waits for mini-vllm to become ready, sends an example text
+generation request, and streams the response and performance statistics to the
+terminal. The server remains running afterward.
+
 Press Ctrl-C to gracefully stop mini-vllm and all of its processes.
 
 When finished working in the project, leave the virtual environment:

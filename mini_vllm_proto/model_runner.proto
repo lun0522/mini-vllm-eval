@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package model_runner;
+
+message TextGenerationStats {
+  uint64 input_token_count = 1;
+  uint64 output_token_count = 2;
+  uint64 prefill_duration_milliseconds = 3;
+  uint64 decode_duration_milliseconds = 4;
+  optional float draft_token_acceptance_rate = 5;
+}

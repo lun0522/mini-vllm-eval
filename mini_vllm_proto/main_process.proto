@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package main_process;
+
+service MainProcessService {
+  rpc Shutdown(.main_process.Shutdown) returns (.main_process.CommandResult);
+}
+
+message Shutdown {}
+message CommandResult {}
