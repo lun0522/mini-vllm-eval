@@ -21,31 +21,31 @@ source .venv/bin/activate
 Start mini-vllm on the CPU:
 
 ```shell
-python3 launch_mini_vllm.py
+python3 main.py
 ```
 
 Use the GPU:
 
 ```shell
-python3 launch_mini_vllm.py --use_gpu
+python3 main.py --use_gpu
 ```
 
 Use paged model memory with the default page size of 16 tokens:
 
 ```shell
-python3 launch_mini_vllm.py --cache_type paged
+python3 main.py --cache_type paged
 ```
 
 Choose a different page size:
 
 ```shell
-python3 launch_mini_vllm.py --cache_type paged --page_size 32
+python3 main.py --cache_type paged --page_size 32
 ```
 
 Enable prefix caching with paged model memory:
 
 ```shell
-python3 launch_mini_vllm.py --cache_type paged-prefix --page_size 32
+python3 main.py --cache_type paged-prefix --page_size 32
 ```
 
 The launcher waits for mini-vllm to become ready, sends an example text

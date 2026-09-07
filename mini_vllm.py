@@ -1,23 +1,19 @@
-#!/usr/bin/env python3
-"""Start the mini-vllm server."""
+"""Helpers for launching and operating mini-vllm-rs."""
 
 from __future__ import annotations
 
-from argparse import Namespace
 import os
 import signal
 import subprocess
 import sys
-import tempfile
+from argparse import Namespace
 from pathlib import Path
 
 import grpc
 from loguru import logger
 
 from cli import DEFAULT_PAGE_SIZE
-from cli import parse_args
 from proto_loader import ProtoModules
-from proto_loader import generate_proto_modules
 
 
 CONTROL_SOCKET = Path("/tmp/mini-vllm-main-process.sock")
@@ -29,6 +25,8 @@ EXAMPLE_PROMPT = (
     "enter and leave a running batch, and discuss the key scheduling and KV-cache "
     "challenges an implementation must handle."
 )
+
+
 def build_command(args: Namespace) -> list[str]:
     command = ["cargo", "run", "--release"]
     if args.use_gpu:
@@ -147,41 +145,3 @@ def stop_server(process: subprocess.Popen[bytes], proto: ProtoModules) -> int:
             logger.warning("Falling back to Ctrl-C")
             os.killpg(process.pid, signal.SIGINT)
     return process.wait()
-
-
-def main() -> int:
-    args = parse_args()
-    repository = args.repo_path.expanduser().resolve()
-    if not (repository / "Cargo.toml").is_file():
-        raise SystemExit(
-            f"Could not find mini-vllm-rs at {repository}. "
-            "Use --repo_path to provide its location."
-        )
-
-    with tempfile.TemporaryDirectory(prefix="mini-vllm-eval-proto-") as directory:
-        proto = generate_proto_modules(repository, Path(directory))
-        logger.info("Launching mini-vllm-rs")
-        try:
-            process = subprocess.Popen(
-                build_command(args),
-                cwd=repository,
-                start_new_session=True,
-            )
-        except FileNotFoundError as error:
-            raise SystemExit(
-                "Could not start mini-vllm-rs because Cargo is not installed or is not on PATH."
-            ) from error
-
-        try:
-            send_example(process, proto)
-            return process.wait()
-        except KeyboardInterrupt:
-            logger.info("Stopping mini-vllm-rs")
-            return stop_server(process, proto)
-        except Exception as error:
-            logger.error("Example request failed: {}", error)
-            return stop_server(process, proto)
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
