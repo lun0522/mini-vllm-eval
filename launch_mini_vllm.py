@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-import argparse
+from argparse import Namespace
 import os
 import signal
 import subprocess
@@ -14,11 +14,12 @@ from pathlib import Path
 import grpc
 from loguru import logger
 
+from cli import DEFAULT_PAGE_SIZE
+from cli import parse_args
 from proto_loader import ProtoModules
 from proto_loader import generate_proto_modules
 
 
-DEFAULT_REPOSITORY = Path(__file__).resolve().parent.parent / "mini-vllm-rs"
 CONTROL_SOCKET = Path("/tmp/mini-vllm-main-process.sock")
 REQUEST_SOCKET = Path("/tmp/mini-vllm-request-handler.sock")
 SHUTDOWN_TIMEOUT_SECONDS = 5
@@ -28,31 +29,18 @@ EXAMPLE_PROMPT = (
     "enter and leave a running batch, and discuss the key scheduling and KV-cache "
     "challenges an implementation must handle."
 )
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--repo_path",
-        type=Path,
-        default=DEFAULT_REPOSITORY,
-        help=f"where mini-vllm-rs is located (default: {DEFAULT_REPOSITORY})",
-    )
-    parser.add_argument(
-        "--use_gpu",
-        action="store_true",
-        help="use the GPU for faster model inference",
-    )
-    return parser.parse_args()
-
-
-def build_command(args: argparse.Namespace) -> list[str]:
+def build_command(args: Namespace) -> list[str]:
     command = ["cargo", "run", "--release"]
     if args.use_gpu:
         command.extend(["--features", "metal"])
+    cache_type = args.cache_type
+    if cache_type != "contiguous":
+        cache_type = f"{cache_type}:{args.page_size or DEFAULT_PAGE_SIZE}"
     command.extend(
         [
             "--",
+            "--kv-cache-type",
+            cache_type,
             "--control-socket",
             str(CONTROL_SOCKET),
             "--request-socket",

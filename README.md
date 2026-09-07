@@ -30,6 +30,24 @@ Use the GPU:
 python3 launch_mini_vllm.py --use_gpu
 ```
 
+Use paged model memory with the default page size of 16 tokens:
+
+```shell
+python3 launch_mini_vllm.py --cache_type paged
+```
+
+Choose a different page size:
+
+```shell
+python3 launch_mini_vllm.py --cache_type paged --page_size 32
+```
+
+Enable prefix caching with paged model memory:
+
+```shell
+python3 launch_mini_vllm.py --cache_type paged-prefix --page_size 32
+```
+
 The launcher waits for mini-vllm to become ready, sends an example text
 generation request, and streams the response and performance statistics to the
 terminal. It generates its Python gRPC clients from the protocol definitions in
