@@ -36,7 +36,6 @@ Press Ctrl-C to stop the benchmark early and gracefully shut down mini-vllm.
 
 Create a `Benchmark` subclass under `benchmarks/` and override:
 
-- `features()` to return the Cargo features needed by the server.
 - `server_flags()` to return additional mini-vllm-rs command-line arguments.
 - `run_benchmark()` to implement the benchmark using the ready request-handler
   client and generated protobuf modules.

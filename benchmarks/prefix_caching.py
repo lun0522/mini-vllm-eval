@@ -7,6 +7,8 @@ from typing import Any
 from loguru import logger
 
 from benchmarks.base import Benchmark
+from benchmarks.base import QWEN_DRAFT_MODEL
+from benchmarks.base import QWEN_TARGET_MODEL
 from proto_loader import ProtoModules
 
 
@@ -19,11 +21,15 @@ PROMPT = (
 
 
 class PrefixCachingBenchmark(Benchmark):
-    def features(self) -> list[str]:
-        return ["metal"]
-
     def server_flags(self) -> list[str]:
-        return ["--kv-cache-type", "paged-prefix:16"]
+        return [
+            "--model",
+            QWEN_TARGET_MODEL,
+            "--draft-model",
+            QWEN_DRAFT_MODEL,
+            "--kv-cache-type",
+            "paged-prefix:16",
+        ]
 
     def run_benchmark(self, client: Any, proto: ProtoModules) -> None:
         request = proto.request_handler.GenerateText(
@@ -45,16 +51,4 @@ class PrefixCachingBenchmark(Benchmark):
                         logger.info("Received {} streamed words", next_word_milestone)
                         next_word_milestone += 100
                 elif event == "stats":
-                    stats = response.stats
-                    logger.info(
-                        "Generated {} tokens (prefill: {} tokens/s, decode: {} tokens/s)",
-                        stats.output_token_count,
-                        self.format_tokens_per_second(
-                            stats.input_token_count,
-                            stats.prefill_duration_microseconds,
-                        ),
-                        self.format_tokens_per_second(
-                            max(stats.output_token_count - 1, 0),
-                            stats.decode_duration_microseconds,
-                        ),
-                    )
+                    self.print_generation_stats(response.stats)
