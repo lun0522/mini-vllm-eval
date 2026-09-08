@@ -1,23 +1,47 @@
 #!/usr/bin/env python3
-"""Start the mini-vllm server."""
+"""Run a mini-vllm benchmark."""
 
 from __future__ import annotations
 
+import argparse
 import subprocess
 import tempfile
 from pathlib import Path
 
 from loguru import logger
 
-from cli import parse_args
-from mini_vllm import build_command
-from mini_vllm import send_example
+from benchmarks import BENCHMARKS
 from mini_vllm import stop_server
 from proto_loader import generate_proto_modules
 
 
+DEFAULT_REPOSITORY = Path(__file__).resolve().parent.parent / "mini-vllm-rs"
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run a mini-vllm benchmark.")
+    parser.add_argument(
+        "--repo_path",
+        type=Path,
+        default=DEFAULT_REPOSITORY,
+        help=f"where mini-vllm-rs is located (default: {DEFAULT_REPOSITORY})",
+    )
+    parser.add_argument(
+        "--benchmark",
+        required=True,
+        help="benchmark to run",
+    )
+    return parser.parse_args()
+
+
 def main() -> int:
     args = parse_args()
+    benchmark = BENCHMARKS.get(args.benchmark)
+    if benchmark is None:
+        available_benchmarks = ", ".join(BENCHMARKS)
+        raise SystemExit(
+            f"Unknown benchmark: {args.benchmark}. Available benchmarks: {available_benchmarks}"
+        )
     repository = args.repo_path.expanduser().resolve()
     if not (repository / "Cargo.toml").is_file():
         raise SystemExit(
@@ -30,7 +54,7 @@ def main() -> int:
         logger.info("Launching mini-vllm-rs")
         try:
             process = subprocess.Popen(
-                build_command(args),
+                benchmark.build_server_command(),
                 cwd=repository,
                 start_new_session=True,
             )
@@ -40,13 +64,13 @@ def main() -> int:
             ) from error
 
         try:
-            send_example(process, proto)
+            benchmark.run(process, proto)
             return process.wait()
         except KeyboardInterrupt:
             logger.info("Stopping mini-vllm-rs")
             return stop_server(process, proto)
         except Exception as error:
-            logger.error("Example request failed: {}", error)
+            logger.error("Benchmark failed: {}", error)
             return stop_server(process, proto)
 
 

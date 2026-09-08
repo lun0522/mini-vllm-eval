@@ -18,43 +18,31 @@ source .venv/bin/activate
 
 ## Run
 
-Start mini-vllm on the CPU:
+Run the prefix-caching benchmark:
 
 ```shell
-python3 main.py
+python3 main.py --benchmark prefix_caching
 ```
 
-Use the GPU:
+The benchmark sends the same request twice to demonstrate prefix reuse. It
+reports progress after every 100 streamed words without printing the generated
+text. The launcher generates its Python gRPC clients from `mini-vllm-rs` at
+startup, keeping the Rust project as the single source of truth. It shuts down
+mini-vllm when the benchmark finishes.
 
-```shell
-python3 main.py --use_gpu
-```
+Press Ctrl-C to stop the benchmark early and gracefully shut down mini-vllm.
 
-Use paged model memory with the default page size of 16 tokens:
+## Add a benchmark
 
-```shell
-python3 main.py --cache_type paged
-```
+Create a `Benchmark` subclass under `benchmarks/` and override:
 
-Choose a different page size:
+- `features()` to return the Cargo features needed by the server.
+- `server_flags()` to return additional mini-vllm-rs command-line arguments.
+- `run_benchmark()` to implement the benchmark using the ready request-handler
+  client and generated protobuf modules.
 
-```shell
-python3 main.py --cache_type paged --page_size 32
-```
-
-Enable prefix caching with paged model memory:
-
-```shell
-python3 main.py --cache_type paged-prefix --page_size 32
-```
-
-The launcher waits for mini-vllm to become ready, sends an example text
-generation request, and streams the response and performance statistics to the
-terminal. It generates its Python gRPC clients from the protocol definitions in
-`mini-vllm-rs` at launch, keeping the Rust project as the single source of
-truth. The server remains running afterward.
-
-Press Ctrl-C to gracefully stop mini-vllm and all of its processes.
+Add an instance of the subclass to `BENCHMARKS` in `benchmarks/__init__.py`. The
+base class handles server startup arguments, connection setup, and shutdown.
 
 When finished working in the project, leave the virtual environment:
 
