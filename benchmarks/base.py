@@ -17,15 +17,36 @@ from mini_vllm import wait_for_server
 from proto_loader import ProtoModules
 
 
-QWEN_TARGET_MODEL = (
+QWEN_LARGE_MODEL = (
     'model_id: "bartowski/Qwen2.5-7B-Instruct-GGUF" '
     'model_filename: "Qwen2.5-7B-Instruct-Q4_K_M.gguf" '
     'tokenizer_id: "Qwen/Qwen2.5-7B-Instruct"'
 )
-QWEN_DRAFT_MODEL = (
+QWEN_SMALL_MODEL = (
     'model_id: "bartowski/Qwen2.5-0.5B-Instruct-GGUF" '
     'model_filename: "Qwen2.5-0.5B-Instruct-Q4_K_M.gguf" '
     'tokenizer_id: "Qwen/Qwen2.5-7B-Instruct"'
+)
+
+EXAMPLE_PROMPT_1 = (
+    "Explain why leaves change color in autumn. Describe the roles of chlorophyll, "
+    "carotenoids, and anthocyanins, and explain how shorter days and cooler temperatures "
+    "affect the chemical processes inside a leaf. Discuss why different tree species "
+    "produce different colors, why weather conditions can make some autumn displays more "
+    "vivid than others, and what eventually causes a leaf to detach from its branch. Present "
+    "the explanation for a curious reader without a biology background, using clear examples "
+    "and avoiding unnecessary technical language. Conclude by explaining how this seasonal "
+    "change helps a deciduous tree survive winter and prepare for growth in spring."
+)
+EXAMPLE_PROMPT_2 = (
+    "Describe how a compiler turns source code into an executable program. Begin with lexical "
+    "analysis and parsing, then explain semantic analysis, intermediate representations, "
+    "optimization, machine-code generation, and linking. Show how errors can be detected at "
+    "different stages and clarify the distinction between compile-time and runtime failures. "
+    "Use one small imaginary function as an example and follow it through the major stages "
+    "without relying on language-specific syntax. Also explain how debug and release builds "
+    "may differ, why optimization can make debugging harder, and how the final executable "
+    "interacts with libraries and the operating system when a user launches it."
 )
 
 

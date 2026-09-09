@@ -7,40 +7,34 @@ from typing import Any
 from loguru import logger
 
 from benchmarks.base import Benchmark
-from benchmarks.base import QWEN_DRAFT_MODEL
-from benchmarks.base import QWEN_TARGET_MODEL
+from benchmarks.base import EXAMPLE_PROMPT_1
+from benchmarks.base import QWEN_LARGE_MODEL
+from benchmarks.base import QWEN_SMALL_MODEL
 from proto_loader import ProtoModules
-
-
-PROMPT = (
-    "Explain in detail how continuous batching improves throughput in an LLM "
-    "inference server. Compare it with static batching, describe how requests "
-    "enter and leave a running batch, and discuss the key scheduling and KV-cache "
-    "challenges an implementation must handle."
-)
 
 
 class PrefixCachingBenchmark(Benchmark):
     def server_flags(self) -> list[str]:
         return [
             "--model",
-            QWEN_TARGET_MODEL,
+            QWEN_LARGE_MODEL,
             "--draft-model",
-            QWEN_DRAFT_MODEL,
+            QWEN_SMALL_MODEL,
             "--kv-cache-type",
             "paged-prefix:16",
         ]
 
     def run_benchmark(self, client: Any, proto: ProtoModules) -> None:
         request = proto.request_handler.GenerateText(
-            prompt=PROMPT,
-            max_new_tokens=1024,
+            prompt=EXAMPLE_PROMPT_1,
+            max_new_tokens=512,
             repeat_penalty=1.1,
             repeat_last_n=64,
             stream_output=True,
+            ignore_eos_tokens=True,
         )
         for request_number in range(1, 3):
-            logger.info("Sending prefix-caching request {} of 2", request_number)
+            logger.info("Sending request {} of 2", request_number)
             streamed_word_count = 0
             next_word_milestone = 100
             for response in client.GenerateText(request):
