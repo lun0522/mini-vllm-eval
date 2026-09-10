@@ -24,17 +24,23 @@ Run the prefix-caching benchmark:
 python3 main.py --benchmark prefix_caching
 ```
 
+Generate one response and print its streamed output:
+
+```shell
+python3 main.py --benchmark simple_generation
+```
+
 Run two generation requests concurrently:
 
 ```shell
 python3 main.py --benchmark concurrent_requests
 ```
 
-The benchmark sends the same request twice to demonstrate prefix reuse. It
-reports progress after every 100 streamed words without printing the generated
-text. The launcher generates its Python gRPC clients from `mini-vllm-rs` at
-startup, keeping the Rust project as the single source of truth. It shuts down
-mini-vllm when the benchmark finishes.
+The prefix-caching benchmark sends the same request twice to demonstrate prefix
+reuse. It reports progress after every 100 streamed words without printing the
+generated text. The launcher generates its Python gRPC clients from
+`mini-vllm-rs` at startup, keeping the Rust project as the single source of
+truth. It shuts down mini-vllm when the benchmark finishes.
 
 Press Ctrl-C to stop the benchmark early and gracefully shut down mini-vllm.
 
