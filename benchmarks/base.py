@@ -83,34 +83,29 @@ class Benchmark(ABC):
         pass
 
     @staticmethod
-    def format_tokens_per_second(token_count: int, duration_us: int) -> str:
-        if duration_us == 0:
-            return "unavailable"
-        return f"{token_count * 1_000_000 / duration_us:.2f}"
-
-    @staticmethod
     def print_generation_stats(stats: Any) -> None:
         draft_acceptance_rate = "unavailable"
         if stats.HasField("draft_token_acceptance_rate"):
             draft_acceptance_rate = f"{stats.draft_token_acceptance_rate * 100:.1f}%"
+        time_to_first_token = "unavailable"
+        end_to_end_latency = "unavailable"
+        if stats.HasField("token_generation_latency"):
+            time_to_first_token = (
+                stats.token_generation_latency.time_to_first_token_microseconds
+            )
+            end_to_end_latency = (
+                stats.token_generation_latency.end_to_end_latency_microseconds
+            )
         logger.info(
             "Generation stats:\n"
             "\tInput tokens: {}\n"
             "\tOutput tokens: {}\n"
-            "\tPrefill: {} us ({} tokens/s)\n"
-            "\tDecode: {} us ({} tokens/s)\n"
+            "\tTime to first token: {} us\n"
+            "\tEnd-to-end latency: {} us\n"
             "\tDraft acceptance: {}",
             stats.input_token_count,
             stats.output_token_count,
-            stats.prefill_duration_microseconds,
-            Benchmark.format_tokens_per_second(
-                stats.input_token_count,
-                stats.prefill_duration_microseconds,
-            ),
-            stats.decode_duration_microseconds,
-            Benchmark.format_tokens_per_second(
-                max(stats.output_token_count - 1, 0),
-                stats.decode_duration_microseconds,
-            ),
+            time_to_first_token,
+            end_to_end_latency,
             draft_acceptance_rate,
         )

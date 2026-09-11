@@ -16,6 +16,12 @@ When returning to the project later, activate the virtual environment first:
 source .venv/bin/activate
 ```
 
+When finished working in the project, leave the virtual environment:
+
+```shell
+deactivate
+```
+
 ## Run
 
 Run the prefix-caching benchmark:
@@ -54,9 +60,3 @@ Create a `Benchmark` subclass under `benchmarks/` and override:
 
 Add an instance of the subclass to `BENCHMARKS` in `benchmarks/__init__.py`. The
 base class handles server startup arguments, connection setup, and shutdown.
-
-When finished working in the project, leave the virtual environment:
-
-```shell
-deactivate
-```

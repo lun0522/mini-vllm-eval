@@ -8,21 +8,13 @@ from loguru import logger
 
 from benchmarks.base import Benchmark
 from benchmarks.base import EXAMPLE_PROMPT_1
-from benchmarks.base import QWEN_LARGE_MODEL
 from benchmarks.base import QWEN_SMALL_MODEL
 from proto_loader import ProtoModules
 
 
 class SimpleGenerationBenchmark(Benchmark):
     def server_flags(self) -> list[str]:
-        return [
-            "--model",
-            QWEN_LARGE_MODEL,
-            "--draft-model",
-            QWEN_SMALL_MODEL,
-            "--kv-cache-type",
-            "paged-prefix:16",
-        ]
+        return ["--model", QWEN_SMALL_MODEL]
 
     def run_benchmark(self, client: Any, proto: ProtoModules) -> None:
         request = proto.request_handler.GenerateText(
@@ -35,6 +27,8 @@ class SimpleGenerationBenchmark(Benchmark):
         )
         logger.info("Sending request")
         for response in client.GenerateText(request):
-            if response.WhichOneof("event") == "text":
+            event = response.WhichOneof("event")
+            if event == "text":
                 print(response.text, end="", flush=True)
-        print("\nDone")
+            elif event == "stats":
+                self.print_generation_stats(response.stats)
