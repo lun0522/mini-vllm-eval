@@ -24,16 +24,16 @@ deactivate
 
 ## Run
 
-Run the prefix-caching benchmark:
-
-```shell
-python3 main.py --benchmark prefix_caching
-```
-
 Generate one response and print its streamed output:
 
 ```shell
 python3 main.py --benchmark simple_generation
+```
+
+Run the prefix-caching benchmark:
+
+```shell
+python3 main.py --benchmark prefix_caching
 ```
 
 Run two generation requests concurrently:
