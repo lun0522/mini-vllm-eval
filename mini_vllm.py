@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import signal
 import subprocess
+import time
 from pathlib import Path
 
 import grpc
@@ -16,6 +17,57 @@ from proto_loader import ProtoModules
 CONTROL_SOCKET = Path("/tmp/mini-vllm-main-process.sock")
 REQUEST_SOCKET = Path("/tmp/mini-vllm-request-handler.sock")
 SHUTDOWN_TIMEOUT_SECONDS = 5
+
+
+def clear_server_sockets() -> None:
+    """Stop previous benchmark servers and remove their stale Unix sockets."""
+    socket_paths = (CONTROL_SOCKET, REQUEST_SOCKET)
+    process_ids: set[int] = set()
+    for socket_path in socket_paths:
+        result = subprocess.run(
+            ["lsof", "-t", "--", str(socket_path)],
+            capture_output=True,
+            check=False,
+            text=True,
+        )
+        process_ids.update(int(line) for line in result.stdout.splitlines())
+
+    process_ids.discard(os.getpid())
+    if process_ids:
+        logger.warning("Stopping processes that own benchmark sockets: {}", process_ids)
+        for process_id in process_ids:
+            try:
+                os.kill(process_id, signal.SIGINT)
+            except ProcessLookupError:
+                pass
+
+        deadline = time.monotonic() + SHUTDOWN_TIMEOUT_SECONDS
+        while process_ids and time.monotonic() < deadline:
+            process_ids = {
+                process_id
+                for process_id in process_ids
+                if _process_exists(process_id)
+            }
+            if process_ids:
+                time.sleep(0.1)
+
+        for process_id in process_ids:
+            try:
+                os.kill(process_id, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+
+    for socket_path in socket_paths:
+        socket_path.unlink(missing_ok=True)
+
+
+def _process_exists(process_id: int) -> bool:
+    try:
+        os.kill(process_id, 0)
+        return True
+    except ProcessLookupError:
+        return False
+
 
 def create_channel(socket_path: Path) -> grpc.Channel:
     # grpcio otherwise derives an invalid HTTP/2 authority from the Unix socket

@@ -11,6 +11,7 @@ from pathlib import Path
 from loguru import logger
 
 from benchmarks import BENCHMARKS
+from mini_vllm import clear_server_sockets
 from mini_vllm import stop_server
 from proto_loader import generate_proto_modules
 
@@ -51,27 +52,45 @@ def main() -> int:
 
     with tempfile.TemporaryDirectory(prefix="mini-vllm-eval-proto-") as directory:
         proto = generate_proto_modules(repository, Path(directory))
-        logger.info("Launching mini-vllm-rs")
-        try:
-            process = subprocess.Popen(
-                benchmark.build_server_command(),
-                cwd=repository,
-                start_new_session=True,
-            )
-        except FileNotFoundError as error:
-            raise SystemExit(
-                "Could not start mini-vllm-rs because Cargo is not installed or is not on PATH."
-            ) from error
+        results = []
+        for case in benchmark.cases():
+            clear_server_sockets()
+            logger.warning("Starting benchmark case: {}", case.name)
+            try:
+                process = subprocess.Popen(
+                    benchmark.build_server_command(case),
+                    cwd=repository,
+                    start_new_session=True,
+                )
+            except FileNotFoundError as error:
+                raise SystemExit(
+                    "Could not start mini-vllm-rs because Cargo is not installed or is not on "
+                    "PATH."
+                ) from error
+
+            try:
+                result = benchmark.run(process, proto, case)
+                exit_code = process.wait()
+                if exit_code != 0:
+                    raise RuntimeError(
+                        f"mini-vllm-rs exited with status {exit_code} for case {case.name}"
+                    )
+                results.append((case, result))
+            except KeyboardInterrupt:
+                logger.info("Benchmark interrupted")
+                return stop_server(process, proto)
+            except Exception as error:
+                logger.error("Benchmark case {} failed: {}", case.name, error)
+                if process.poll() is None:
+                    stop_server(process, proto)
+                return 1
 
         try:
-            benchmark.run(process, proto)
-            return process.wait()
-        except KeyboardInterrupt:
-            logger.info("Stopping mini-vllm-rs")
-            return stop_server(process, proto)
+            benchmark.report_results(results)
         except Exception as error:
-            logger.error("Benchmark failed: {}", error)
-            return stop_server(process, proto)
+            logger.error("Benchmark validation failed: {}", error)
+            return 1
+        return 0
 
 
 if __name__ == "__main__":

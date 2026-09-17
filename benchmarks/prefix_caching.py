@@ -7,6 +7,7 @@ from typing import Any
 from loguru import logger
 
 from benchmarks.base import Benchmark
+from benchmarks.base import BenchmarkCase
 from benchmarks.base import EXAMPLE_PROMPT_1
 from benchmarks.base import QWEN_LARGE_MODEL
 from benchmarks.base import QWEN_SMALL_MODEL
@@ -24,7 +25,12 @@ class PrefixCachingBenchmark(Benchmark):
             "paged-prefix:16",
         ]
 
-    def run_benchmark(self, client: Any, proto: ProtoModules) -> None:
+    def run_benchmark(
+        self,
+        client: Any,
+        proto: ProtoModules,
+        _case: BenchmarkCase,
+    ) -> None:
         request = proto.request_handler.GenerateText(
             prompt=EXAMPLE_PROMPT_1,
             max_new_tokens=512,
