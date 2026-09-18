@@ -8,9 +8,9 @@ from loguru import logger
 
 from benchmarks.base import Benchmark
 from benchmarks.base import BenchmarkCase
-from benchmarks.base import EXAMPLE_PROMPT_1
 from benchmarks.base import QWEN_LARGE_MODEL
 from benchmarks.base import QWEN_SMALL_MODEL
+from benchmarks.example_prompts import EXAMPLE_SHORT_PROMPT_1
 from proto_loader import ProtoModules
 
 
@@ -32,7 +32,7 @@ class PrefixCachingBenchmark(Benchmark):
         _case: BenchmarkCase,
     ) -> None:
         request = proto.request_handler.GenerateText(
-            prompt=EXAMPLE_PROMPT_1,
+            prompt=EXAMPLE_SHORT_PROMPT_1,
             max_new_tokens=512,
             repeat_penalty=1.1,
             repeat_last_n=64,

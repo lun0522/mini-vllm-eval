@@ -12,11 +12,9 @@ from tabulate import tabulate
 
 from benchmarks.base import Benchmark
 from benchmarks.base import BenchmarkCase
-from benchmarks.base import EXAMPLE_PROMPT_1
-from benchmarks.base import EXAMPLE_PROMPT_2
 from benchmarks.base import GenerationMetrics
-from benchmarks.base import QWEN_LARGE_MODEL
 from benchmarks.base import QWEN_SMALL_MODEL
+from benchmarks.example_prompts import EXAMPLE_LONG_PROMPTS
 from proto_loader import ProtoModules
 
 
@@ -40,59 +38,29 @@ class ConcurrentRequestsBenchmark(Benchmark):
     def cases(self) -> tuple[BenchmarkCase, ...]:
         return (
             BenchmarkCase(
-                "Sequential Target-only",
-                tuple(
-                    self._server_flags(
-                        use_draft_model=False,
-                        use_continuous_batching=False,
-                    )
-                ),
+                "Sequential",
+                tuple(self._server_flags(max_active_request_count=1)),
             ),
             BenchmarkCase(
-                "Continuously Batched Target-only",
-                tuple(
-                    self._server_flags(
-                        use_draft_model=False,
-                        use_continuous_batching=True,
-                    )
-                ),
+                "Concurrent 2",
+                tuple(self._server_flags(max_active_request_count=2)),
             ),
             BenchmarkCase(
-                "Sequential Speculative",
-                tuple(
-                    self._server_flags(
-                        use_draft_model=True,
-                        use_continuous_batching=False,
-                    )
-                ),
-            ),
-            BenchmarkCase(
-                "Continuously Batched Speculative",
-                tuple(
-                    self._server_flags(
-                        use_draft_model=True,
-                        use_continuous_batching=True,
-                    )
-                ),
+                "Concurrent 4",
+                tuple(self._server_flags(max_active_request_count=4)),
             ),
         )
 
     @staticmethod
-    def _server_flags(
-        use_draft_model: bool,
-        use_continuous_batching: bool,
-    ) -> list[str]:
-        flags = [
+    def _server_flags(max_active_request_count: int) -> list[str]:
+        return [
             "--model",
-            QWEN_LARGE_MODEL,
+            QWEN_SMALL_MODEL,
             "--kv-cache-type",
             "paged-prefix:16",
+            "--max-active-request-count",
+            str(max_active_request_count),
         ]
-        if use_draft_model:
-            flags.extend(("--draft-model", QWEN_SMALL_MODEL))
-        if use_continuous_batching:
-            flags.append("--enable-continuous-batching")
-        return flags
 
     def run_benchmark(
         self,
@@ -101,7 +69,8 @@ class ConcurrentRequestsBenchmark(Benchmark):
         case: BenchmarkCase,
     ) -> ConcurrentCaseResult:
         started_at = perf_counter()
-        with ThreadPoolExecutor(max_workers=2) as executor:
+        prompts = EXAMPLE_LONG_PROMPTS[:4]
+        with ThreadPoolExecutor(max_workers=len(prompts)) as executor:
             futures = [
                 executor.submit(
                     self._send_request,
@@ -111,9 +80,7 @@ class ConcurrentRequestsBenchmark(Benchmark):
                     request_number,
                     prompt,
                 )
-                for request_number, prompt in enumerate(
-                    (EXAMPLE_PROMPT_1, EXAMPLE_PROMPT_2), start=1
-                )
+                for request_number, prompt in enumerate(prompts, start=1)
             ]
             requests = tuple(future.result() for future in futures)
         return ConcurrentCaseResult(
