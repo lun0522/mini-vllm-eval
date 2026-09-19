@@ -42,6 +42,12 @@ Run two generation requests concurrently:
 python3 main.py --benchmark concurrent_requests
 ```
 
+Compare CPU generation with and without paged attention:
+
+```shell
+python3 main.py --benchmark cpu_paged_attention
+```
+
 The prefix-caching benchmark sends the same request twice to demonstrate prefix
 reuse. It reports progress after every 100 streamed words without printing the
 generated text. The launcher generates its Python gRPC clients from

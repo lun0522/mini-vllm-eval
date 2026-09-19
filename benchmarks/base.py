@@ -44,6 +44,7 @@ LLAMA_SMALL_MODEL = (
 class BenchmarkCase:
     name: str
     server_flags: tuple[str, ...]
+    environment: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)

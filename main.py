@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import tempfile
 from pathlib import Path
@@ -60,6 +61,7 @@ def main() -> int:
                 process = subprocess.Popen(
                     benchmark.build_server_command(case),
                     cwd=repository,
+                    env={**os.environ, **dict(case.environment)},
                     start_new_session=True,
                 )
             except FileNotFoundError as error:
