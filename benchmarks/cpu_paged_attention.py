@@ -1,4 +1,4 @@
-"""Compare CPU generation with and without paged attention."""
+"""Compare CPU attention implementations and query-head layouts."""
 
 from __future__ import annotations
 
@@ -17,6 +17,9 @@ from proto_loader import ProtoModules
 
 
 PAGED_ATTENTION_ENVIRONMENT_VARIABLE = "MINI_VLLM_ENABLE_CPU_PAGED_ATTENTION"
+CPU_GROUPED_QUERY_MATMUL_ENVIRONMENT_VARIABLE = (
+    "MINI_VLLM_ENABLE_CPU_GROUPED_QUERY_MATMUL"
+)
 MAX_NEW_TOKEN_COUNTS = (1, 512, 2048)
 
 
@@ -29,6 +32,7 @@ class CpuPagedAttentionRequestResult:
 @dataclass(frozen=True)
 class CpuPagedAttentionCaseResult:
     paged_attention_enabled: bool
+    grouped_query_matmul_enabled: bool
     requests: tuple[CpuPagedAttentionRequestResult, ...]
 
 
@@ -45,17 +49,29 @@ class CpuPagedAttentionBenchmark(Benchmark):
 
     def cases(self) -> tuple[BenchmarkCase, ...]:
         server_flags = tuple(self.server_flags())
-        return (
+        return tuple(
             BenchmarkCase(
-                "Paged attention disabled",
+                f"{attention_name}, {matmul_name}",
                 server_flags,
-                ((PAGED_ATTENTION_ENVIRONMENT_VARIABLE, "false"),),
-            ),
-            BenchmarkCase(
-                "Paged attention enabled",
-                server_flags,
-                ((PAGED_ATTENTION_ENVIRONMENT_VARIABLE, "true"),),
-            ),
+                (
+                    (
+                        PAGED_ATTENTION_ENVIRONMENT_VARIABLE,
+                        str(paged_attention_enabled).lower(),
+                    ),
+                    (
+                        CPU_GROUPED_QUERY_MATMUL_ENVIRONMENT_VARIABLE,
+                        str(grouped_query_matmul_enabled).lower(),
+                    ),
+                ),
+            )
+            for paged_attention_enabled, attention_name in (
+                (False, "Contiguous attention"),
+                (True, "Paged attention"),
+            )
+            for grouped_query_matmul_enabled, matmul_name in (
+                (False, "repeated KV"),
+                (True, "grouped Q"),
+            )
         )
 
     def run_benchmark(
@@ -64,13 +80,14 @@ class CpuPagedAttentionBenchmark(Benchmark):
         proto: ProtoModules,
         case: BenchmarkCase,
     ) -> CpuPagedAttentionCaseResult:
-        paged_attention_enabled = self._paged_attention_enabled(case)
+        paged_attention_enabled, grouped_query_matmul_enabled = self._case_mode(case)
         requests = tuple(
             self._run_request(client, proto, max_new_tokens)
             for max_new_tokens in MAX_NEW_TOKEN_COUNTS
         )
         return CpuPagedAttentionCaseResult(
             paged_attention_enabled=paged_attention_enabled,
+            grouped_query_matmul_enabled=grouped_query_matmul_enabled,
             requests=requests,
         )
 
@@ -78,29 +95,35 @@ class CpuPagedAttentionBenchmark(Benchmark):
         self,
         results: list[tuple[BenchmarkCase, Any]],
     ) -> None:
-        results_by_mode: dict[bool, CpuPagedAttentionCaseResult] = {}
+        results_by_mode: dict[tuple[bool, bool], CpuPagedAttentionCaseResult] = {}
         for case, result in results:
             if not isinstance(result, CpuPagedAttentionCaseResult):
                 raise RuntimeError(
                     f"case {case.name} did not return CPU paged-attention results"
                 )
-            if result.paged_attention_enabled in results_by_mode:
+            mode = (
+                result.paged_attention_enabled,
+                result.grouped_query_matmul_enabled,
+            )
+            if mode in results_by_mode:
                 raise RuntimeError(
                     "received duplicate CPU paged-attention benchmark results"
                 )
-            results_by_mode[result.paged_attention_enabled] = result
+            results_by_mode[mode] = result
 
-        try:
-            disabled = results_by_mode[False]
-            enabled = results_by_mode[True]
-        except KeyError as error:
+        expected_modes = {
+            (paged_attention_enabled, grouped_query_matmul_enabled)
+            for paged_attention_enabled in (False, True)
+            for grouped_query_matmul_enabled in (False, True)
+        }
+        if set(results_by_mode) != expected_modes:
             raise RuntimeError(
-                "CPU paged-attention benchmark requires disabled and enabled results"
-            ) from error
+                "CPU paged-attention benchmark requires all four attention/layout results"
+            )
 
         logger.info(
-            "CPU paged-attention comparison:\n{}",
-            self._format_comparison(disabled, enabled),
+            "CPU attention comparison:\n{}",
+            self._format_comparison(results_by_mode),
         )
 
     def _run_request(
@@ -135,96 +158,103 @@ class CpuPagedAttentionBenchmark(Benchmark):
         return result
 
     @staticmethod
-    def _paged_attention_enabled(case: BenchmarkCase) -> bool:
+    def _case_mode(case: BenchmarkCase) -> tuple[bool, bool]:
         environment = dict(case.environment)
-        value = environment.get(PAGED_ATTENTION_ENVIRONMENT_VARIABLE)
+        return (
+            CpuPagedAttentionBenchmark._environment_bool(
+                case,
+                environment,
+                PAGED_ATTENTION_ENVIRONMENT_VARIABLE,
+            ),
+            CpuPagedAttentionBenchmark._environment_bool(
+                case,
+                environment,
+                CPU_GROUPED_QUERY_MATMUL_ENVIRONMENT_VARIABLE,
+            ),
+        )
+
+    @staticmethod
+    def _environment_bool(
+        case: BenchmarkCase,
+        environment: dict[str, str],
+        name: str,
+    ) -> bool:
+        value = environment.get(name)
         if value not in ("false", "true"):
-            raise RuntimeError(
-                f"case {case.name} has invalid {PAGED_ATTENTION_ENVIRONMENT_VARIABLE}={value}"
-            )
+            raise RuntimeError(f"case {case.name} has invalid {name}={value}")
         return value == "true"
 
     @classmethod
     def _format_comparison(
         cls,
-        disabled: CpuPagedAttentionCaseResult,
-        enabled: CpuPagedAttentionCaseResult,
+        results_by_mode: dict[tuple[bool, bool], CpuPagedAttentionCaseResult],
     ) -> str:
-        disabled_requests = {
-            request.max_new_tokens: request for request in disabled.requests
+        requests_by_mode = {
+            mode: {
+                request.max_new_tokens: request for request in result.requests
+            }
+            for mode, result in results_by_mode.items()
         }
-        enabled_requests = {
-            request.max_new_tokens: request for request in enabled.requests
-        }
-        if set(disabled_requests) != set(MAX_NEW_TOKEN_COUNTS):
-            raise RuntimeError("disabled results do not contain the expected token limits")
-        if set(enabled_requests) != set(MAX_NEW_TOKEN_COUNTS):
-            raise RuntimeError("enabled results do not contain the expected token limits")
+        for mode, requests in requests_by_mode.items():
+            if set(requests) != set(MAX_NEW_TOKEN_COUNTS):
+                raise RuntimeError(
+                    f"results for mode {mode} do not contain the expected token limits"
+                )
 
         rows = []
         for max_new_tokens in MAX_NEW_TOKEN_COUNTS:
-            disabled_metrics = disabled_requests[max_new_tokens].metrics
-            enabled_metrics = enabled_requests[max_new_tokens].metrics
-            cls._validate_comparable_metrics(
-                max_new_tokens,
-                disabled_metrics,
-                enabled_metrics,
+            metrics_by_mode = {
+                mode: requests[max_new_tokens].metrics
+                for mode, requests in requests_by_mode.items()
+            }
+            cls._validate_comparable_metrics(max_new_tokens, metrics_by_mode)
+            baseline_metrics = metrics_by_mode[(False, False)]
+            _, baseline_e2e = cls._required_latencies(baseline_metrics)
+            baseline_decode_rate = cls._decode_tokens_per_second(
+                baseline_metrics.output_token_count,
+                *cls._required_latencies(baseline_metrics),
             )
-            disabled_ttft, disabled_e2e = cls._required_latencies(disabled_metrics)
-            enabled_ttft, enabled_e2e = cls._required_latencies(enabled_metrics)
-            disabled_total_rate = cls._tokens_per_second(
-                disabled_metrics.output_token_count,
-                disabled_e2e,
-            )
-            enabled_total_rate = cls._tokens_per_second(
-                enabled_metrics.output_token_count,
-                enabled_e2e,
-            )
-            disabled_decode_rate = cls._decode_tokens_per_second(
-                disabled_metrics.output_token_count,
-                disabled_ttft,
-                disabled_e2e,
-            )
-            enabled_decode_rate = cls._decode_tokens_per_second(
-                enabled_metrics.output_token_count,
-                enabled_ttft,
-                enabled_e2e,
-            )
-            rows.append(
-                (
-                    str(max_new_tokens),
-                    str(disabled_metrics.output_token_count),
-                    f"{disabled_ttft / 1_000:.3f}",
-                    f"{enabled_ttft / 1_000:.3f}",
-                    f"{disabled_e2e / 1_000_000:.3f}",
-                    f"{enabled_e2e / 1_000_000:.3f}",
-                    cls._format_speedup(disabled_e2e, enabled_e2e),
-                    f"{disabled_total_rate:.2f}",
-                    f"{enabled_total_rate:.2f}",
-                    cls._format_optional_rate(disabled_decode_rate),
-                    cls._format_optional_rate(enabled_decode_rate),
-                    cls._format_optional_speedup(
-                        disabled_decode_rate,
-                        enabled_decode_rate,
-                    ),
+            for mode in ((False, False), (False, True), (True, False), (True, True)):
+                paged_attention_enabled, grouped_query_matmul_enabled = mode
+                metrics = metrics_by_mode[mode]
+                ttft, e2e = cls._required_latencies(metrics)
+                total_rate = cls._tokens_per_second(metrics.output_token_count, e2e)
+                decode_rate = cls._decode_tokens_per_second(
+                    metrics.output_token_count,
+                    ttft,
+                    e2e,
                 )
-            )
+                rows.append(
+                    (
+                        str(max_new_tokens),
+                        str(metrics.output_token_count),
+                        "Paged" if paged_attention_enabled else "Contiguous",
+                        "Grouped Q" if grouped_query_matmul_enabled else "Repeated KV",
+                        f"{ttft / 1_000:.3f}",
+                        f"{e2e / 1_000_000:.3f}",
+                        cls._format_speedup(baseline_e2e, e2e),
+                        f"{total_rate:.2f}",
+                        cls._format_optional_rate(decode_rate),
+                        cls._format_optional_speedup(
+                            baseline_decode_rate,
+                            decode_rate,
+                        ),
+                    )
+                )
 
         return tabulate(
             rows,
             headers=(
                 "Max new",
                 "Output",
-                "TTFT off (ms)",
-                "TTFT on (ms)",
-                "E2E off (s)",
-                "E2E on (s)",
-                "E2E speedup",
-                "Total off (tok/s)",
-                "Total on (tok/s)",
-                "Decode off (tok/s)",
-                "Decode on (tok/s)",
-                "Decode speedup",
+                "Attention",
+                "Q/KV layout",
+                "TTFT (ms)",
+                "E2E (s)",
+                "E2E vs baseline",
+                "Total (tok/s)",
+                "Decode (tok/s)",
+                "Decode vs baseline",
             ),
             tablefmt="simple",
         )
@@ -232,20 +262,28 @@ class CpuPagedAttentionBenchmark(Benchmark):
     @staticmethod
     def _validate_comparable_metrics(
         max_new_tokens: int,
-        disabled: GenerationMetrics,
-        enabled: GenerationMetrics,
+        metrics_by_mode: dict[tuple[bool, bool], GenerationMetrics],
     ) -> None:
-        if disabled.input_token_count != enabled.input_token_count:
+        input_token_counts = {
+            metrics.input_token_count for metrics in metrics_by_mode.values()
+        }
+        if len(input_token_counts) != 1:
             raise RuntimeError(
-                f"{max_new_tokens}-token runs have different input token counts"
+                f"{max_new_tokens}-token runs have different input token counts: "
+                f"{sorted(input_token_counts)}"
             )
-        if disabled.output_token_count != enabled.output_token_count:
+        output_token_counts = {
+            metrics.output_token_count for metrics in metrics_by_mode.values()
+        }
+        if len(output_token_counts) != 1:
             raise RuntimeError(
-                f"{max_new_tokens}-token runs have different output token counts"
+                f"{max_new_tokens}-token runs have different output token counts: "
+                f"{sorted(output_token_counts)}"
             )
-        if disabled.output_token_count != max_new_tokens:
+        output_token_count = next(iter(output_token_counts))
+        if output_token_count != max_new_tokens:
             raise RuntimeError(
-                f"{max_new_tokens}-token runs produced {disabled.output_token_count} tokens"
+                f"{max_new_tokens}-token runs produced {output_token_count} tokens"
             )
 
     @staticmethod
@@ -278,8 +316,8 @@ class CpuPagedAttentionBenchmark(Benchmark):
         return (output_token_count - 1) * 1_000_000 / decode_duration_microseconds
 
     @staticmethod
-    def _format_speedup(disabled_duration: int, enabled_duration: int) -> str:
-        return f"{disabled_duration / enabled_duration:.2f}x"
+    def _format_speedup(baseline_duration: int, duration: int) -> str:
+        return f"{baseline_duration / duration:.2f}x"
 
     @staticmethod
     def _format_optional_rate(value: float | None) -> str:
@@ -287,9 +325,9 @@ class CpuPagedAttentionBenchmark(Benchmark):
 
     @staticmethod
     def _format_optional_speedup(
-        disabled_rate: float | None,
-        enabled_rate: float | None,
+        baseline_rate: float | None,
+        rate: float | None,
     ) -> str:
-        if disabled_rate is None or enabled_rate is None:
+        if baseline_rate is None or rate is None:
             return "-"
-        return f"{enabled_rate / disabled_rate:.2f}x"
+        return f"{rate / baseline_rate:.2f}x"
