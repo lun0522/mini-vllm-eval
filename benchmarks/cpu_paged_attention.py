@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import subprocess
 from dataclasses import dataclass
+from dataclasses import replace
 from typing import Any
 
 from loguru import logger
@@ -13,6 +15,8 @@ from benchmarks.base import BenchmarkCase
 from benchmarks.base import GenerationMetrics
 from benchmarks.base import QWEN_SMALL_MODEL
 from benchmarks.example_prompts import EXAMPLE_SHORT_PROMPT_1
+from process_metrics import ProcessTreeRssSampler
+from process_metrics import RssMetrics
 from proto_loader import ProtoModules
 
 
@@ -30,6 +34,7 @@ MAX_NEW_TOKEN_COUNTS = (1, 512, 2048)
 class CpuPagedAttentionRequestResult:
     max_new_tokens: int
     metrics: GenerationMetrics
+    rss_metrics: RssMetrics | None
 
 
 @dataclass(frozen=True)
@@ -94,21 +99,32 @@ class CpuPagedAttentionBenchmark(Benchmark):
         client: Any,
         proto: ProtoModules,
         case: BenchmarkCase,
+        process: subprocess.Popen[bytes],
     ) -> CpuPagedAttentionCaseResult:
         (
             paged_attention_enabled,
             grouped_query_matmul_enabled,
             pagewise_value_matmul_enabled,
         ) = self._case_mode(case)
-        requests = tuple(
-            self._run_request(client, proto, max_new_tokens)
-            for max_new_tokens in MAX_NEW_TOKEN_COUNTS
+        warmup_result = self._run_request(client, proto, MAX_NEW_TOKEN_COUNTS[0])
+        sampler = ProcessTreeRssSampler(process.pid)
+        sampler.start()
+        try:
+            measured_results = tuple(
+                self._run_request(client, proto, max_new_tokens)
+                for max_new_tokens in MAX_NEW_TOKEN_COUNTS[1:]
+            )
+        finally:
+            rss_metrics = sampler.stop()
+        measured_results = (
+            *measured_results[:-1],
+            replace(measured_results[-1], rss_metrics=rss_metrics),
         )
         return CpuPagedAttentionCaseResult(
             paged_attention_enabled=paged_attention_enabled,
             grouped_query_matmul_enabled=grouped_query_matmul_enabled,
             pagewise_value_matmul_enabled=pagewise_value_matmul_enabled,
-            requests=requests,
+            requests=(warmup_result, *measured_results),
         )
 
     def report_results(
@@ -151,6 +167,10 @@ class CpuPagedAttentionBenchmark(Benchmark):
                 max_new_tokens,
                 table,
             )
+        logger.info(
+            "Peak RSS comparison after the 1-token warm-up:\n{}",
+            self._format_rss_comparison(results_by_mode),
+        )
 
     def _run_request(
         self,
@@ -170,18 +190,19 @@ class CpuPagedAttentionBenchmark(Benchmark):
             "Sending request with max_new_tokens={}",
             max_new_tokens,
         )
-        result = None
+        metrics = None
         for response in client.GenerateText(request):
             if response.WhichOneof("event") == "stats":
-                result = CpuPagedAttentionRequestResult(
-                    max_new_tokens=max_new_tokens,
-                    metrics=self.generation_metrics(response.stats),
-                )
-        if result is None:
+                metrics = self.generation_metrics(response.stats)
+        if metrics is None:
             raise RuntimeError(
                 f"{max_new_tokens}-token request completed without statistics"
             )
-        return result
+        return CpuPagedAttentionRequestResult(
+            max_new_tokens=max_new_tokens,
+            metrics=metrics,
+            rss_metrics=None,
+        )
 
     @staticmethod
     def _case_mode(case: BenchmarkCase) -> tuple[bool, bool, bool]:
@@ -311,6 +332,70 @@ class CpuPagedAttentionBenchmark(Benchmark):
                 )
             )
         return tuple(tables)
+
+    @classmethod
+    def _format_rss_comparison(
+        cls,
+        results_by_mode: dict[tuple[bool, bool, bool], CpuPagedAttentionCaseResult],
+    ) -> str:
+        rows = []
+        for mode in (
+            (False, False, False),
+            (False, True, False),
+            (True, False, False),
+            (True, False, True),
+            (True, True, False),
+            (True, True, True),
+        ):
+            result = results_by_mode[mode]
+            requests = {
+                request.max_new_tokens: request for request in result.requests
+            }
+            request = requests.get(2048)
+            if request is None:
+                raise RuntimeError(f"results for mode {mode} do not contain 2048 tokens")
+            if request.rss_metrics is None:
+                raise RuntimeError(f"2048-token result for mode {mode} has no RSS metrics")
+
+            (
+                paged_attention_enabled,
+                grouped_query_matmul_enabled,
+                pagewise_enabled,
+            ) = mode
+            if not paged_attention_enabled:
+                value_matmul_name = "Full V"
+            elif pagewise_enabled:
+                value_matmul_name = "Page-wise V"
+            else:
+                value_matmul_name = "Concatenated V"
+            rss_metrics = request.rss_metrics
+            rows.append(
+                (
+                    "Paged" if paged_attention_enabled else "Contiguous",
+                    "Grouped Q" if grouped_query_matmul_enabled else "Repeated KV",
+                    value_matmul_name,
+                    cls._format_kib_as_mib(rss_metrics.starting_rss_kib),
+                    cls._format_kib_as_mib(rss_metrics.peak_rss_kib),
+                    cls._format_kib_as_mib(rss_metrics.peak_increase_kib),
+                )
+            )
+
+        return tabulate(
+            rows,
+            headers=(
+                "Attention",
+                "Q/KV layout",
+                "V matmul",
+                "Start RSS (MiB)",
+                "Peak RSS (MiB)",
+                "Peak increase (MiB)",
+            ),
+            tablefmt="simple",
+        )
+
+    @staticmethod
+    def _format_kib_as_mib(value: int) -> str:
+        return f"{value / 1024:.2f}"
 
     @staticmethod
     def _validate_comparable_metrics(

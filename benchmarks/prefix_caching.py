@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 from typing import Any
 
 from loguru import logger
@@ -30,6 +31,7 @@ class PrefixCachingBenchmark(Benchmark):
         client: Any,
         proto: ProtoModules,
         _case: BenchmarkCase,
+        _process: subprocess.Popen[bytes],
     ) -> None:
         request = proto.request_handler.GenerateText(
             prompt=EXAMPLE_SHORT_PROMPT_1,

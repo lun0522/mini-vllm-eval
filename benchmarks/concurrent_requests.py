@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from time import perf_counter
@@ -67,6 +68,7 @@ class ConcurrentRequestsBenchmark(Benchmark):
         client: Any,
         proto: ProtoModules,
         case: BenchmarkCase,
+        _process: subprocess.Popen[bytes],
     ) -> ConcurrentCaseResult:
         started_at = perf_counter()
         prompts = EXAMPLE_LONG_PROMPTS[:4]

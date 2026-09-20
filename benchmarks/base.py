@@ -83,7 +83,7 @@ class Benchmark(ABC):
             wait_for_server(process, channel)
             client = proto.request_handler_grpc.RequestHandlerServiceStub(channel)
             try:
-                return self.run_benchmark(client, proto, case)
+                return self.run_benchmark(client, proto, case, process)
             finally:
                 logger.info("Benchmark finished; stopping mini-vllm-rs")
                 send_shutdown(proto)
@@ -105,6 +105,7 @@ class Benchmark(ABC):
         client: Any,
         proto: ProtoModules,
         case: BenchmarkCase,
+        process: subprocess.Popen[bytes],
     ) -> Any:
         pass
 
