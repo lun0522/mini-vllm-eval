@@ -20,6 +20,9 @@ PAGED_ATTENTION_ENVIRONMENT_VARIABLE = "MINI_VLLM_ENABLE_CPU_PAGED_ATTENTION"
 CPU_GROUPED_QUERY_MATMUL_ENVIRONMENT_VARIABLE = (
     "MINI_VLLM_ENABLE_CPU_GROUPED_QUERY_MATMUL"
 )
+CPU_PAGEWISE_VALUE_MATMUL_ENVIRONMENT_VARIABLE = (
+    "MINI_VLLM_ENABLE_CPU_PAGEWISE_VALUE_MATMUL"
+)
 MAX_NEW_TOKEN_COUNTS = (1, 512, 2048)
 
 
@@ -33,6 +36,7 @@ class CpuPagedAttentionRequestResult:
 class CpuPagedAttentionCaseResult:
     paged_attention_enabled: bool
     grouped_query_matmul_enabled: bool
+    pagewise_value_matmul_enabled: bool
     requests: tuple[CpuPagedAttentionRequestResult, ...]
 
 
@@ -51,7 +55,7 @@ class CpuPagedAttentionBenchmark(Benchmark):
         server_flags = tuple(self.server_flags())
         return tuple(
             BenchmarkCase(
-                f"{attention_name}, {matmul_name}",
+                f"{attention_name}, {query_matmul_name}, {value_matmul_name}",
                 server_flags,
                 (
                     (
@@ -62,15 +66,26 @@ class CpuPagedAttentionBenchmark(Benchmark):
                         CPU_GROUPED_QUERY_MATMUL_ENVIRONMENT_VARIABLE,
                         str(grouped_query_matmul_enabled).lower(),
                     ),
+                    (
+                        CPU_PAGEWISE_VALUE_MATMUL_ENVIRONMENT_VARIABLE,
+                        str(pagewise_value_matmul_enabled).lower(),
+                    ),
                 ),
             )
-            for paged_attention_enabled, attention_name in (
-                (False, "Contiguous attention"),
-                (True, "Paged attention"),
-            )
-            for grouped_query_matmul_enabled, matmul_name in (
-                (False, "repeated KV"),
-                (True, "grouped Q"),
+            for (
+                paged_attention_enabled,
+                grouped_query_matmul_enabled,
+                pagewise_value_matmul_enabled,
+                attention_name,
+                query_matmul_name,
+                value_matmul_name,
+            ) in (
+                (False, False, False, "Contiguous attention", "repeated KV", "full V"),
+                (False, True, False, "Contiguous attention", "grouped Q", "full V"),
+                (True, False, False, "Paged attention", "repeated KV", "concatenated V"),
+                (True, False, True, "Paged attention", "repeated KV", "page-wise V"),
+                (True, True, False, "Paged attention", "grouped Q", "concatenated V"),
+                (True, True, True, "Paged attention", "grouped Q", "page-wise V"),
             )
         )
 
@@ -80,7 +95,11 @@ class CpuPagedAttentionBenchmark(Benchmark):
         proto: ProtoModules,
         case: BenchmarkCase,
     ) -> CpuPagedAttentionCaseResult:
-        paged_attention_enabled, grouped_query_matmul_enabled = self._case_mode(case)
+        (
+            paged_attention_enabled,
+            grouped_query_matmul_enabled,
+            pagewise_value_matmul_enabled,
+        ) = self._case_mode(case)
         requests = tuple(
             self._run_request(client, proto, max_new_tokens)
             for max_new_tokens in MAX_NEW_TOKEN_COUNTS
@@ -88,6 +107,7 @@ class CpuPagedAttentionBenchmark(Benchmark):
         return CpuPagedAttentionCaseResult(
             paged_attention_enabled=paged_attention_enabled,
             grouped_query_matmul_enabled=grouped_query_matmul_enabled,
+            pagewise_value_matmul_enabled=pagewise_value_matmul_enabled,
             requests=requests,
         )
 
@@ -95,7 +115,7 @@ class CpuPagedAttentionBenchmark(Benchmark):
         self,
         results: list[tuple[BenchmarkCase, Any]],
     ) -> None:
-        results_by_mode: dict[tuple[bool, bool], CpuPagedAttentionCaseResult] = {}
+        results_by_mode: dict[tuple[bool, bool, bool], CpuPagedAttentionCaseResult] = {}
         for case, result in results:
             if not isinstance(result, CpuPagedAttentionCaseResult):
                 raise RuntimeError(
@@ -104,6 +124,7 @@ class CpuPagedAttentionBenchmark(Benchmark):
             mode = (
                 result.paged_attention_enabled,
                 result.grouped_query_matmul_enabled,
+                result.pagewise_value_matmul_enabled,
             )
             if mode in results_by_mode:
                 raise RuntimeError(
@@ -112,19 +133,24 @@ class CpuPagedAttentionBenchmark(Benchmark):
             results_by_mode[mode] = result
 
         expected_modes = {
-            (paged_attention_enabled, grouped_query_matmul_enabled)
-            for paged_attention_enabled in (False, True)
-            for grouped_query_matmul_enabled in (False, True)
+            (False, False, False),
+            (False, True, False),
+            (True, False, False),
+            (True, False, True),
+            (True, True, False),
+            (True, True, True),
         }
         if set(results_by_mode) != expected_modes:
             raise RuntimeError(
-                "CPU paged-attention benchmark requires all four attention/layout results"
+                "CPU paged-attention benchmark requires all six attention/layout results"
             )
 
-        logger.info(
-            "CPU attention comparison:\n{}",
-            self._format_comparison(results_by_mode),
-        )
+        for max_new_tokens, table in self._format_comparisons(results_by_mode):
+            logger.info(
+                "CPU attention comparison with output token limit {}:\n{}",
+                max_new_tokens,
+                table,
+            )
 
     def _run_request(
         self,
@@ -158,7 +184,7 @@ class CpuPagedAttentionBenchmark(Benchmark):
         return result
 
     @staticmethod
-    def _case_mode(case: BenchmarkCase) -> tuple[bool, bool]:
+    def _case_mode(case: BenchmarkCase) -> tuple[bool, bool, bool]:
         environment = dict(case.environment)
         return (
             CpuPagedAttentionBenchmark._environment_bool(
@@ -170,6 +196,11 @@ class CpuPagedAttentionBenchmark(Benchmark):
                 case,
                 environment,
                 CPU_GROUPED_QUERY_MATMUL_ENVIRONMENT_VARIABLE,
+            ),
+            CpuPagedAttentionBenchmark._environment_bool(
+                case,
+                environment,
+                CPU_PAGEWISE_VALUE_MATMUL_ENVIRONMENT_VARIABLE,
             ),
         )
 
@@ -185,10 +216,10 @@ class CpuPagedAttentionBenchmark(Benchmark):
         return value == "true"
 
     @classmethod
-    def _format_comparison(
+    def _format_comparisons(
         cls,
-        results_by_mode: dict[tuple[bool, bool], CpuPagedAttentionCaseResult],
-    ) -> str:
+        results_by_mode: dict[tuple[bool, bool, bool], CpuPagedAttentionCaseResult],
+    ) -> tuple[tuple[int, str], ...]:
         requests_by_mode = {
             mode: {
                 request.max_new_tokens: request for request in result.requests
@@ -201,21 +232,33 @@ class CpuPagedAttentionBenchmark(Benchmark):
                     f"results for mode {mode} do not contain the expected token limits"
                 )
 
-        rows = []
+        tables = []
         for max_new_tokens in MAX_NEW_TOKEN_COUNTS:
+            rows = []
             metrics_by_mode = {
                 mode: requests[max_new_tokens].metrics
                 for mode, requests in requests_by_mode.items()
             }
             cls._validate_comparable_metrics(max_new_tokens, metrics_by_mode)
-            baseline_metrics = metrics_by_mode[(False, False)]
+            baseline_metrics = metrics_by_mode[(False, False, False)]
             _, baseline_e2e = cls._required_latencies(baseline_metrics)
             baseline_decode_rate = cls._decode_tokens_per_second(
                 baseline_metrics.output_token_count,
                 *cls._required_latencies(baseline_metrics),
             )
-            for mode in ((False, False), (False, True), (True, False), (True, True)):
-                paged_attention_enabled, grouped_query_matmul_enabled = mode
+            for mode in (
+                (False, False, False),
+                (False, True, False),
+                (True, False, False),
+                (True, False, True),
+                (True, True, False),
+                (True, True, True),
+            ):
+                (
+                    paged_attention_enabled,
+                    grouped_query_matmul_enabled,
+                    pagewise_value_matmul_enabled,
+                ) = mode
                 metrics = metrics_by_mode[mode]
                 ttft, e2e = cls._required_latencies(metrics)
                 total_rate = cls._tokens_per_second(metrics.output_token_count, e2e)
@@ -224,12 +267,17 @@ class CpuPagedAttentionBenchmark(Benchmark):
                     ttft,
                     e2e,
                 )
+                if not paged_attention_enabled:
+                    value_matmul_name = "Full V"
+                elif pagewise_value_matmul_enabled:
+                    value_matmul_name = "Page-wise V"
+                else:
+                    value_matmul_name = "Concatenated V"
                 rows.append(
                     (
-                        str(max_new_tokens),
-                        str(metrics.output_token_count),
                         "Paged" if paged_attention_enabled else "Contiguous",
                         "Grouped Q" if grouped_query_matmul_enabled else "Repeated KV",
+                        value_matmul_name,
                         f"{ttft / 1_000:.3f}",
                         f"{e2e / 1_000_000:.3f}",
                         cls._format_speedup(baseline_e2e, e2e),
@@ -242,27 +290,32 @@ class CpuPagedAttentionBenchmark(Benchmark):
                     )
                 )
 
-        return tabulate(
-            rows,
-            headers=(
-                "Max new",
-                "Output",
-                "Attention",
-                "Q/KV layout",
-                "TTFT (ms)",
-                "E2E (s)",
-                "E2E vs baseline",
-                "Total (tok/s)",
-                "Decode (tok/s)",
-                "Decode vs baseline",
-            ),
-            tablefmt="simple",
-        )
+            tables.append(
+                (
+                    max_new_tokens,
+                    tabulate(
+                        rows,
+                        headers=(
+                            "Attention",
+                            "Q/KV layout",
+                            "V matmul",
+                            "TTFT (ms)",
+                            "E2E (s)",
+                            "E2E vs baseline",
+                            "Total (tok/s)",
+                            "Decode (tok/s)",
+                            "Decode vs baseline",
+                        ),
+                        tablefmt="simple",
+                    ),
+                )
+            )
+        return tuple(tables)
 
     @staticmethod
     def _validate_comparable_metrics(
         max_new_tokens: int,
-        metrics_by_mode: dict[tuple[bool, bool], GenerationMetrics],
+        metrics_by_mode: dict[tuple[bool, bool, bool], GenerationMetrics],
     ) -> None:
         input_token_counts = {
             metrics.input_token_count for metrics in metrics_by_mode.values()

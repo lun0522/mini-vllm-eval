@@ -42,8 +42,8 @@ Run two generation requests concurrently:
 python3 main.py --benchmark concurrent_requests
 ```
 
-Compare contiguous and paged CPU attention with repeated-KV and grouped-Q
-matmul:
+Compare contiguous and paged CPU attention with repeated-KV/grouped-Q and
+concatenated/page-wise value matmul:
 
 ```shell
 python3 main.py --benchmark cpu_paged_attention
