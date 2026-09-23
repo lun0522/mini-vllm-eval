@@ -6,6 +6,7 @@ import subprocess
 from abc import ABC
 from abc import abstractmethod
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from loguru import logger
@@ -60,8 +61,12 @@ class Benchmark(ABC):
     def cases(self) -> tuple[BenchmarkCase, ...]:
         return (BenchmarkCase("default", tuple(self.server_flags())),)
 
-    def build_server_command(self, case: BenchmarkCase) -> list[str]:
-        return [
+    def build_server_command(
+        self,
+        case: BenchmarkCase,
+        trace_directory: Path | None = None,
+    ) -> list[str]:
+        command = [
             "cargo",
             "run",
             "--release",
@@ -72,6 +77,9 @@ class Benchmark(ABC):
             "--request-socket",
             str(REQUEST_SOCKET),
         ]
+        if trace_directory is not None:
+            command.extend(("--trace-directory", str(trace_directory)))
+        return command
 
     def run(
         self,

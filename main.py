@@ -33,6 +33,11 @@ def parse_args() -> argparse.Namespace:
         required=True,
         help="benchmark to run",
     )
+    parser.add_argument(
+        "--trace-directory",
+        type=Path,
+        help="directory where the model runner writes a Chrome trace",
+    )
     return parser.parse_args()
 
 
@@ -45,6 +50,11 @@ def main() -> int:
             f"Unknown benchmark: {args.benchmark}. Available benchmarks: {available_benchmarks}"
         )
     repository = args.repo_path.expanduser().resolve()
+    trace_directory = (
+        args.trace_directory.expanduser().resolve()
+        if args.trace_directory is not None
+        else None
+    )
     if not (repository / "Cargo.toml").is_file():
         raise SystemExit(
             f"Could not find mini-vllm-rs at {repository}. "
@@ -59,7 +69,7 @@ def main() -> int:
             logger.warning("Starting benchmark case: {}", case.name)
             try:
                 process = subprocess.Popen(
-                    benchmark.build_server_command(case),
+                    benchmark.build_server_command(case, trace_directory),
                     cwd=repository,
                     env={**os.environ, **dict(case.environment)},
                     start_new_session=True,
