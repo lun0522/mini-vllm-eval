@@ -42,9 +42,9 @@ Run two generation requests concurrently:
 python3 main.py --benchmark concurrent_requests
 ```
 
-Compare F32 and F16 CPU activations using a one-token warm-up followed by a
-1024-token measured request. The two cases allocate equal KV-cache token
-capacity by giving F16 half the F32 byte budget.
+Compare F32 and F16 CPU activations using a short one-token warm-up followed by
+a long-prompt, 1024-token measured request. The two cases allocate equal
+KV-cache token capacity by giving F16 half the F32 byte budget.
 
 ```shell
 python3 main.py --benchmark cpu_activation_dtype
@@ -63,9 +63,9 @@ Compare the measured prefill and final long-context decode in the latest F32
 and F16 traces:
 
 ```shell
-python3 analysis/activation_traces.py \
-  /tmp/mini-vllm-activation-traces/f32/model-runner-F32-PID.json \
-  /tmp/mini-vllm-activation-traces/f16/model-runner-F16-PID.json
+python3 .agents/skills/activation-dtype-benchmark/scripts/activation_traces.py \
+  /tmp/mini-vllm-activation-traces/f32/model-runner-TIMESTAMP.json \
+  /tmp/mini-vllm-activation-traces/f16/model-runner-TIMESTAMP.json
 ```
 
 Compare contiguous and paged CPU attention with repeated-KV/grouped-Q and

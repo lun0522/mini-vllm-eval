@@ -14,6 +14,7 @@ from benchmarks.base import Benchmark
 from benchmarks.base import BenchmarkCase
 from benchmarks.base import GenerationMetrics
 from benchmarks.base import QWEN_SMALL_MODEL
+from benchmarks.example_prompts import EXAMPLE_LONG_PROMPT_1
 from benchmarks.example_prompts import EXAMPLE_SHORT_PROMPT_1
 from process_metrics import ProcessTreeRssSampler
 from process_metrics import RssMetrics
@@ -48,6 +49,8 @@ class CpuActivationDtypeBenchmark(Benchmark):
             "paged:16",
             "--inference-device",
             "cpu",
+            "--max-batched-token-count",
+            "1024",
         ]
 
     def cases(self) -> tuple[BenchmarkCase, ...]:
@@ -99,6 +102,7 @@ class CpuActivationDtypeBenchmark(Benchmark):
         warmup_metrics = self._run_request(
             client,
             proto,
+            EXAMPLE_SHORT_PROMPT_1,
             WARMUP_MAX_NEW_TOKENS,
         )
         sampler = ProcessTreeRssSampler(process.pid)
@@ -107,6 +111,7 @@ class CpuActivationDtypeBenchmark(Benchmark):
             measured_metrics = self._run_request(
                 client,
                 proto,
+                EXAMPLE_LONG_PROMPT_1,
                 MEASURED_MAX_NEW_TOKENS,
             )
         finally:
@@ -172,7 +177,8 @@ class CpuActivationDtypeBenchmark(Benchmark):
             )
 
         logger.info(
-            "CPU activation dtype comparison with a {}-token measured request:\n{}",
+            "CPU activation dtype comparison with a {}-token input and {}-token output:\n{}",
+            f32.measured_metrics.input_token_count,
             MEASURED_MAX_NEW_TOKENS,
             tabulate(
                 rows,
@@ -195,10 +201,11 @@ class CpuActivationDtypeBenchmark(Benchmark):
         self,
         client: Any,
         proto: ProtoModules,
+        prompt: str,
         max_new_tokens: int,
     ) -> GenerationMetrics:
         request = proto.request_handler.GenerateText(
-            prompt=EXAMPLE_SHORT_PROMPT_1,
+            prompt=prompt,
             max_new_tokens=max_new_tokens,
             repeat_penalty=1.1,
             repeat_last_n=64,
