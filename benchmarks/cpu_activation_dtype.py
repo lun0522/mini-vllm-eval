@@ -16,12 +16,14 @@ from benchmarks.base import GenerationMetrics
 from benchmarks.base import QWEN_SMALL_MODEL
 from benchmarks.example_prompts import EXAMPLE_LONG_PROMPT_1
 from benchmarks.example_prompts import EXAMPLE_SHORT_PROMPT_1
+from benchmarks.example_prompts import EXAMPLE_SHORT_PROMPT_2
 from process_metrics import ProcessTreeRssSampler
 from process_metrics import RssMetrics
 from proto_loader import ProtoModules
 
 
 WARMUP_MAX_NEW_TOKENS = 1
+SMALL_PREFILL_MAX_NEW_TOKENS = 1
 MEASURED_MAX_NEW_TOKENS = 1024
 F32_KV_CACHE_SIZE_BYTES = 128 * 1024 * 1024
 F16_KV_CACHE_SIZE_BYTES = F32_KV_CACHE_SIZE_BYTES // 2
@@ -30,13 +32,20 @@ ATTENTION_ENVIRONMENT = (
     ("MINI_VLLM_ENABLE_CPU_PAGED_ATTENTION", "false"),
     ("MINI_VLLM_ENABLE_CPU_PAGEWISE_VALUE_MATMUL", "false"),
 )
+F16_QMATMUL_ENVIRONMENT_VARIABLE = "MINI_VLLM_ENABLE_CPU_F16_QMATMUL_VIA_F32"
+CONFIGURATIONS = (
+    "F32",
+    "F16",
+    "F16-QMatMul",
+)
 
 
 @dataclass(frozen=True)
 class CpuActivationDtypeCaseResult:
-    activation_dtype: str
+    configuration: str
     warmup_metrics: GenerationMetrics
-    measured_metrics: GenerationMetrics
+    small_prefill_metrics: GenerationMetrics
+    long_request_metrics: GenerationMetrics
     rss_metrics: RssMetrics
 
 
@@ -55,28 +64,44 @@ class CpuActivationDtypeBenchmark(Benchmark):
 
     def cases(self) -> tuple[BenchmarkCase, ...]:
         server_flags = tuple(self.server_flags())
-        return (
-            BenchmarkCase(
-                "F32",
-                (
-                    *server_flags,
-                    "--activation-dtype",
-                    "f32",
-                    "--target-kv-cache-size-bytes",
-                    str(F32_KV_CACHE_SIZE_BYTES),
-                ),
-                ATTENTION_ENVIRONMENT,
+        return tuple(
+            self._case(
+                name,
+                server_flags,
+                activation_dtype,
+                qmatmul_via_f32,
+            )
+            for (name, activation_dtype, qmatmul_via_f32) in (
+                ("F32", "f32", False),
+                ("F16", "f16", False),
+                ("F16-QMatMul", "f16", True),
+            )
+        )
+
+    @staticmethod
+    def _case(
+        name: str,
+        server_flags: tuple[str, ...],
+        activation_dtype: str,
+        qmatmul_via_f32: bool,
+    ) -> BenchmarkCase:
+        kv_cache_size_bytes = (
+            F32_KV_CACHE_SIZE_BYTES
+            if activation_dtype == "f32"
+            else F16_KV_CACHE_SIZE_BYTES
+        )
+        return BenchmarkCase(
+            name,
+            (
+                *server_flags,
+                "--activation-dtype",
+                activation_dtype,
+                "--target-kv-cache-size-bytes",
+                str(kv_cache_size_bytes),
             ),
-            BenchmarkCase(
-                "F16",
-                (
-                    *server_flags,
-                    "--activation-dtype",
-                    "f16",
-                    "--target-kv-cache-size-bytes",
-                    str(F16_KV_CACHE_SIZE_BYTES),
-                ),
-                ATTENTION_ENVIRONMENT,
+            (
+                *ATTENTION_ENVIRONMENT,
+                (F16_QMATMUL_ENVIRONMENT_VARIABLE, str(qmatmul_via_f32).lower()),
             ),
         )
 
@@ -105,10 +130,16 @@ class CpuActivationDtypeBenchmark(Benchmark):
             EXAMPLE_SHORT_PROMPT_1,
             WARMUP_MAX_NEW_TOKENS,
         )
+        small_prefill_metrics = self._run_request(
+            client,
+            proto,
+            EXAMPLE_SHORT_PROMPT_2,
+            SMALL_PREFILL_MAX_NEW_TOKENS,
+        )
         sampler = ProcessTreeRssSampler(process.pid)
         sampler.start()
         try:
-            measured_metrics = self._run_request(
+            long_request_metrics = self._run_request(
                 client,
                 proto,
                 EXAMPLE_LONG_PROMPT_1,
@@ -117,9 +148,10 @@ class CpuActivationDtypeBenchmark(Benchmark):
         finally:
             rss_metrics = sampler.stop()
         return CpuActivationDtypeCaseResult(
-            activation_dtype=case.name,
+            configuration=case.name,
             warmup_metrics=warmup_metrics,
-            measured_metrics=measured_metrics,
+            small_prefill_metrics=small_prefill_metrics,
+            long_request_metrics=long_request_metrics,
             rss_metrics=rss_metrics,
         )
 
@@ -127,35 +159,39 @@ class CpuActivationDtypeBenchmark(Benchmark):
         self,
         results: list[tuple[BenchmarkCase, Any]],
     ) -> None:
-        results_by_dtype: dict[str, CpuActivationDtypeCaseResult] = {}
+        results_by_configuration: dict[str, CpuActivationDtypeCaseResult] = {}
         for case, result in results:
             if not isinstance(result, CpuActivationDtypeCaseResult):
                 raise RuntimeError(
                     f"case {case.name} did not return CPU activation-dtype results"
                 )
-            if result.activation_dtype in results_by_dtype:
+            if result.configuration in results_by_configuration:
                 raise RuntimeError(
-                    f"received duplicate {result.activation_dtype} benchmark results"
+                    f"received duplicate {result.configuration} benchmark results"
                 )
-            results_by_dtype[result.activation_dtype] = result
+            results_by_configuration[result.configuration] = result
 
-        if set(results_by_dtype) != {"F32", "F16"}:
-            raise RuntimeError("CPU activation-dtype benchmark requires F32 and F16 results")
+        if set(results_by_configuration) != set(CONFIGURATIONS):
+            raise RuntimeError(
+                "CPU activation-dtype benchmark requires all three configurations"
+            )
 
-        f32 = results_by_dtype["F32"]
-        self._validate_result(f32)
-        self._validate_result(results_by_dtype["F16"])
-        f32_ttft, f32_e2e = self._required_latencies(f32.measured_metrics)
+        for result in results_by_configuration.values():
+            self._validate_result(result)
+        f32 = results_by_configuration["F32"]
+        f32_small_ttft, _ = self._required_latencies(f32.small_prefill_metrics)
+        f32_ttft, f32_e2e = self._required_latencies(f32.long_request_metrics)
         f32_decode_rate = self._decode_tokens_per_second(
-            f32.measured_metrics.output_token_count,
+            f32.long_request_metrics.output_token_count,
             f32_ttft,
             f32_e2e,
         )
 
         rows = []
-        for activation_dtype in ("F32", "F16"):
-            result = results_by_dtype[activation_dtype]
-            metrics = result.measured_metrics
+        for configuration in CONFIGURATIONS:
+            result = results_by_configuration[configuration]
+            metrics = result.long_request_metrics
+            small_ttft, _ = self._required_latencies(result.small_prefill_metrics)
             ttft, e2e = self._required_latencies(metrics)
             decode_rate = self._decode_tokens_per_second(
                 metrics.output_token_count,
@@ -164,7 +200,9 @@ class CpuActivationDtypeBenchmark(Benchmark):
             )
             rows.append(
                 (
-                    activation_dtype,
+                    configuration,
+                    f"{small_ttft / 1_000:.3f}",
+                    f"{small_ttft / f32_small_ttft:.2f}x",
                     f"{ttft / 1_000:.3f}",
                     f"{e2e / 1_000_000:.3f}",
                     f"{f32_e2e / e2e:.2f}x",
@@ -177,14 +215,18 @@ class CpuActivationDtypeBenchmark(Benchmark):
             )
 
         logger.info(
-            "CPU activation dtype comparison with a {}-token input and {}-token output:\n{}",
-            f32.measured_metrics.input_token_count,
+            "CPU activation dtype comparison with a {}-token small prefill and a "
+            "{}-token input / {}-token output long request:\n{}",
+            f32.small_prefill_metrics.input_token_count,
+            f32.long_request_metrics.input_token_count,
             MEASURED_MAX_NEW_TOKENS,
             tabulate(
                 rows,
                 headers=(
-                    "Activation",
-                    "TTFT (ms)",
+                    "Configuration",
+                    "Small TTFT (ms)",
+                    "Small vs F32",
+                    "Large TTFT (ms)",
                     "E2E (s)",
                     "E2E vs F32",
                     "Decode (tok/s)",
@@ -227,13 +269,21 @@ class CpuActivationDtypeBenchmark(Benchmark):
     def _validate_result(result: CpuActivationDtypeCaseResult) -> None:
         if result.warmup_metrics.output_token_count != WARMUP_MAX_NEW_TOKENS:
             raise RuntimeError(
-                f"{result.activation_dtype} warm-up produced "
+                f"{result.configuration} warm-up produced "
                 f"{result.warmup_metrics.output_token_count} tokens"
             )
-        if result.measured_metrics.output_token_count != MEASURED_MAX_NEW_TOKENS:
+        if (
+            result.small_prefill_metrics.output_token_count
+            != SMALL_PREFILL_MAX_NEW_TOKENS
+        ):
             raise RuntimeError(
-                f"{result.activation_dtype} measured request produced "
-                f"{result.measured_metrics.output_token_count} tokens"
+                f"{result.configuration} small-prefill request produced "
+                f"{result.small_prefill_metrics.output_token_count} tokens"
+            )
+        if result.long_request_metrics.output_token_count != MEASURED_MAX_NEW_TOKENS:
+            raise RuntimeError(
+                f"{result.configuration} long request produced "
+                f"{result.long_request_metrics.output_token_count} tokens"
             )
 
     @staticmethod

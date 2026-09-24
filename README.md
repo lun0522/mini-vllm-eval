@@ -42,16 +42,20 @@ Run two generation requests concurrently:
 python3 main.py --benchmark concurrent_requests
 ```
 
-Compare F32 and F16 CPU activations using a short one-token warm-up followed by
-a long-prompt, 1024-token measured request. The two cases allocate equal
-KV-cache token capacity by giving F16 half the F32 byte budget.
+Compare three CPU activation configurations: F32, unoptimized F16, and F16
+using quantized matmul via F32. Each case uses a short one-token warm-up, a
+distinct short-prompt request producing one token, and a long-prompt request
+producing 1024 tokens. This exposes both
+small- and large-prefill behavior, long-context decoding, and memory use. All
+cases allocate equal KV-cache token capacity by giving F16 half the F32 byte
+budget.
 
 ```shell
 python3 main.py --benchmark cpu_activation_dtype
 ```
 
-To collect Chrome traces for both cases, provide a trace directory. The
-benchmark writes each case beneath separate `f32` and `f16` subdirectories:
+To collect Chrome traces for all three configurations, provide a trace
+directory. The benchmark writes each case beneath its own subdirectory:
 
 ```shell
 python3 main.py \
@@ -59,13 +63,14 @@ python3 main.py \
   --trace-directory /tmp/mini-vllm-activation-traces
 ```
 
-Compare the measured prefill and final long-context decode in the latest F32
-and F16 traces:
+Compare the measured small prefill, large prefill, and final long-context decode
+in the latest F32 and F16 traces:
 
 ```shell
 python3 .agents/skills/activation-dtype-benchmark/scripts/activation_traces.py \
   /tmp/mini-vllm-activation-traces/f32/model-runner-TIMESTAMP.json \
-  /tmp/mini-vllm-activation-traces/f16/model-runner-TIMESTAMP.json
+  /tmp/mini-vllm-activation-traces/f16/model-runner-TIMESTAMP.json \
+  /tmp/mini-vllm-activation-traces/f16-qmatmul/model-runner-TIMESTAMP.json
 ```
 
 Compare contiguous and paged CPU attention with repeated-KV/grouped-Q and

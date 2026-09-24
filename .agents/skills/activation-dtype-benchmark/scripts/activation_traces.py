@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Analyze measured prefill and final decode in F32/F16 Chrome traces."""
+"""Analyze the three CPU activation configurations in Chrome traces."""
 
 from __future__ import annotations
 
@@ -12,6 +12,18 @@ from pathlib import Path
 from typing import Any
 
 from tabulate import tabulate
+
+
+CONFIGURATIONS = (
+    "F32",
+    "F16",
+    "F16-QMatMul",
+)
+TRACE_ARGUMENTS = (
+    ("f32_trace", "F32"),
+    ("f16_trace", "F16"),
+    ("f16_qmatmul_trace", "F16-QMatMul"),
+)
 
 
 @dataclass
@@ -74,33 +86,29 @@ class OpenSpan:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Compare F32 and F16 mini-vllm Chrome traces."
+        description="Compare mini-vllm CPU activation optimization traces."
     )
-    parser.add_argument(
-        "f32_trace",
-        type=Path,
-        help="F32 Chrome trace file",
-    )
-    parser.add_argument(
-        "f16_trace",
-        type=Path,
-        help="F16 Chrome trace file",
-    )
+    for argument, configuration in TRACE_ARGUMENTS:
+        parser.add_argument(
+            argument,
+            type=Path,
+            help=f"{configuration} Chrome trace file",
+        )
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
     traces = {
-        "F32": args.f32_trace.expanduser().resolve(),
-        "F16": args.f16_trace.expanduser().resolve(),
+        configuration: getattr(args, argument).expanduser().resolve()
+        for argument, configuration in TRACE_ARGUMENTS
     }
     for dtype, trace in traces.items():
         if not trace.is_file():
             raise SystemExit(f"{dtype} trace file does not exist: {trace}")
     selected_forwards = {
-        dtype: _select_forwards(_read_forwards(trace))
-        for dtype, trace in traces.items()
+        configuration: _select_forwards(_read_forwards(trace))
+        for configuration, trace in traces.items()
     }
 
     print("Traces:")
@@ -108,9 +116,10 @@ def main() -> int:
         print(f"  {dtype}: {trace}")
     print()
 
-    for phase in ("prefill", "last decode"):
+    for phase in ("small prefill", "large prefill", "last decode"):
         phase_forwards = {
-            dtype: forwards[phase] for dtype, forwards in selected_forwards.items()
+            configuration: forwards[phase]
+            for configuration, forwards in selected_forwards.items()
         }
         _print_summary(phase, phase_forwards)
         _print_qmatmul_breakdown(phase_forwards)
@@ -164,14 +173,15 @@ def _read_forwards(trace: Path) -> list[ForwardMetrics]:
 
     if active_forwards or any(stacks.values()):
         raise RuntimeError(f"trace contains unfinished spans: {trace}")
-    if len(forwards) < 2:
-        raise RuntimeError(f"trace contains fewer than two model forwards: {trace}")
+    if len(forwards) < 3:
+        raise RuntimeError(f"trace contains fewer than three model forwards: {trace}")
     return forwards
 
 
 def _select_forwards(forwards: list[ForwardMetrics]) -> dict[str, ForwardMetrics]:
     return {
-        "prefill": forwards[1],
+        "small prefill": forwards[1],
+        "large prefill": forwards[2],
         "last decode": forwards[-1],
     }
 
@@ -195,28 +205,21 @@ def _print_summary(
     rows = []
     for name in metric_names:
         durations = {
-            dtype: (
+            configuration: (
                 forward.duration_microseconds
                 if name == "model"
                 else forward.aggregate(name).total_microseconds
             )
-            for dtype, forward in forwards.items()
+            for configuration, forward in forwards.items()
         }
-        if durations["F32"] == 0 and durations["F16"] == 0:
+        if not any(durations.values()):
             continue
-        rows.append(
-            (
-                name,
-                _milliseconds(durations["F32"]),
-                _milliseconds(durations["F16"]),
-                _ratio(durations["F16"], durations["F32"]),
-            )
-        )
+        rows.append((name, *_comparison_columns(durations)))
     print(f"{phase.title()} summary:")
     print(
         tabulate(
             rows,
-            headers=("Span", "F32 (ms)", "F16 (ms)", "F16 / F32"),
+            headers=("Span", *_comparison_headers()),
             tablefmt="simple",
         )
     )
@@ -236,18 +239,18 @@ def _print_qmatmul_breakdown(forwards: dict[str, ForwardMetrics]) -> None:
     rows = []
     for operation in operations:
         metrics = {
-            dtype: forward.aggregate("qmatmul", operation=operation)
-            for dtype, forward in forwards.items()
+            configuration: forward.aggregate("qmatmul", operation=operation)
+            for configuration, forward in forwards.items()
         }
         rows.append(
             (
                 operation,
                 metrics["F32"].count,
-                _milliseconds(metrics["F32"].total_microseconds),
-                _milliseconds(metrics["F16"].total_microseconds),
-                _ratio(
-                    metrics["F16"].total_microseconds,
-                    metrics["F32"].total_microseconds,
+                *_comparison_columns(
+                    {
+                        configuration: value.total_microseconds
+                        for configuration, value in metrics.items()
+                    }
                 ),
             )
         )
@@ -258,9 +261,7 @@ def _print_qmatmul_breakdown(forwards: dict[str, ForwardMetrics]) -> None:
             headers=(
                 "Operation",
                 "Count",
-                "F32 (ms)",
-                "F16 (ms)",
-                "F16 / F32",
+                *_comparison_headers(),
             ),
             tablefmt="simple",
         )
@@ -282,19 +283,19 @@ def _print_attention_breakdown(forwards: dict[str, ForwardMetrics]) -> None:
     for name, args_tuple in keys:
         args = dict(args_tuple)
         metrics = {
-            dtype: forward.aggregate(name, **args)
-            for dtype, forward in forwards.items()
+            configuration: forward.aggregate(name, **args)
+            for configuration, forward in forwards.items()
         }
         rows.append(
             (
                 name,
                 ", ".join(f"{key}={value}" for key, value in args_tuple) or "-",
                 metrics["F32"].count,
-                _milliseconds(metrics["F32"].total_microseconds),
-                _milliseconds(metrics["F16"].total_microseconds),
-                _ratio(
-                    metrics["F16"].total_microseconds,
-                    metrics["F32"].total_microseconds,
+                *_comparison_columns(
+                    {
+                        configuration: value.total_microseconds
+                        for configuration, value in metrics.items()
+                    }
                 ),
             )
         )
@@ -306,9 +307,7 @@ def _print_attention_breakdown(forwards: dict[str, ForwardMetrics]) -> None:
                 "Span",
                 "Arguments",
                 "Count",
-                "F32 (ms)",
-                "F16 (ms)",
-                "F16 / F32",
+                *_comparison_headers(),
             ),
             tablefmt="simple",
         )
@@ -327,6 +326,25 @@ def _normalize_arg(value: Any) -> Any:
 
 def _milliseconds(microseconds: float) -> str:
     return f"{microseconds / 1_000:.3f}"
+
+
+def _comparison_headers() -> tuple[str, ...]:
+    duration_headers = tuple(f"{configuration} (ms)" for configuration in CONFIGURATIONS)
+    ratio_headers = tuple(
+        f"{configuration} / F32" for configuration in CONFIGURATIONS[1:]
+    )
+    return (*duration_headers, *ratio_headers)
+
+
+def _comparison_columns(durations: dict[str, float]) -> tuple[str, ...]:
+    duration_columns = tuple(
+        _milliseconds(durations[configuration]) for configuration in CONFIGURATIONS
+    )
+    ratio_columns = tuple(
+        _ratio(durations[configuration], durations["F32"])
+        for configuration in CONFIGURATIONS[1:]
+    )
+    return (*duration_columns, *ratio_columns)
 
 
 def _ratio(numerator: float, denominator: float) -> str:

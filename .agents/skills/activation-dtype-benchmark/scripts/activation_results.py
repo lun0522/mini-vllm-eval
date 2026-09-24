@@ -18,8 +18,17 @@ from activation_traces import _read_forwards
 from activation_traces import _select_forwards
 
 
-DTYPES = ("F32", "F16")
-PHASES = ("prefill", "last decode")
+CONFIGURATIONS = (
+    "F32",
+    "F16",
+    "F16-QMatMul",
+)
+TRACE_ARGUMENTS = (
+    ("f32_trace", "F32"),
+    ("f16_trace", "F16"),
+    ("f16_qmatmul_trace", "F16-QMatMul"),
+)
+PHASES = ("small prefill", "large prefill", "last decode")
 SUMMARY_SPANS = (
     "model",
     "attn",
@@ -34,13 +43,14 @@ SUMMARY_SPANS = (
 )
 ANSI_ESCAPE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 BENCHMARK_ROW = re.compile(
-    r"^\s*(F32|F16)\s+"
-    r"([0-9.]+)\s+([0-9.]+)\s+\S+\s+([0-9.]+)\s+\S+\s+"
+    rf"^\s*({'|'.join(re.escape(value) for value in CONFIGURATIONS)})\s+"
+    r"([0-9.]+)\s+\S+\s+([0-9.]+)\s+([0-9.]+)\s+\S+\s+([0-9.]+)\s+\S+\s+"
     r"([0-9.]+)\s+([0-9.]+)\s+([0-9.]+)\s*$",
     re.MULTILINE,
 )
 REQUEST_DESCRIPTION = re.compile(
-    r"CPU activation dtype comparison with a (\d+)-token input and (\d+)-token output"
+    r"CPU activation dtype comparison with a (\d+)-token small prefill and a "
+    r"(\d+)-token input / (\d+)-token output long request"
 )
 
 
@@ -52,21 +62,31 @@ def parse_args() -> argparse.Namespace:
 
     record = subparsers.add_parser("record", help="record one benchmark run")
     record.add_argument("benchmark_log", type=Path)
-    record.add_argument("f32_trace", type=Path)
-    record.add_argument("f16_trace", type=Path)
+    for argument, _ in TRACE_ARGUMENTS:
+        record.add_argument(argument, type=Path)
     record.add_argument("output", type=Path)
 
     aggregate = subparsers.add_parser(
         "aggregate", help="aggregate two or more recorded runs"
     )
     aggregate.add_argument("results", type=Path, nargs="+")
+    aggregate_logs = subparsers.add_parser(
+        "aggregate-logs", help="aggregate two or more untraced benchmark logs"
+    )
+    aggregate_logs.add_argument("logs", type=Path, nargs="+")
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
     if args.command == "record":
-        result = _record(args.benchmark_log, args.f32_trace, args.f16_trace)
+        result = _record(
+            args.benchmark_log,
+            {
+                configuration: getattr(args, argument)
+                for argument, configuration in TRACE_ARGUMENTS
+            },
+        )
         output = args.output.expanduser().resolve()
         output.parent.mkdir(parents=True, exist_ok=True)
         with output.open("w") as file:
@@ -75,15 +95,19 @@ def main() -> int:
         print(f"Recorded activation benchmark result: {output}")
         return 0
 
+    if args.command == "aggregate-logs":
+        _aggregate_logs(args.logs)
+        return 0
+
     _aggregate(args.results)
     return 0
 
 
-def _record(benchmark_log: Path, f32_trace: Path, f16_trace: Path) -> dict[str, Any]:
+def _record(benchmark_log: Path, trace_paths: dict[str, Path]) -> dict[str, Any]:
     benchmark_log = benchmark_log.expanduser().resolve()
     traces = {
-        "F32": f32_trace.expanduser().resolve(),
-        "F16": f16_trace.expanduser().resolve(),
+        configuration: path.expanduser().resolve()
+        for configuration, path in trace_paths.items()
     }
     for path in (benchmark_log, *traces.values()):
         if not path.is_file():
@@ -91,15 +115,18 @@ def _record(benchmark_log: Path, f32_trace: Path, f16_trace: Path) -> dict[str, 
 
     measurements, request = _parse_benchmark_log(benchmark_log)
     forwards = {
-        dtype: _select_forwards(_read_forwards(trace))
-        for dtype, trace in traces.items()
+        configuration: _select_forwards(_read_forwards(trace))
+        for configuration, trace in traces.items()
     }
     for phase in PHASES:
-        phase_forwards = {dtype: forwards[dtype][phase] for dtype in DTYPES}
+        phase_forwards = {
+            configuration: forwards[configuration][phase]
+            for configuration in CONFIGURATIONS
+        }
         _record_trace_phase(measurements, phase, phase_forwards)
 
     return {
-        "schema_version": 1,
+        "schema_version": 4,
         "request": request,
         "measurements": measurements,
     }
@@ -114,12 +141,13 @@ def _parse_benchmark_log(log: Path) -> tuple[dict[str, Any], dict[str, int]]:
     rows: dict[str, tuple[str, ...]] = {}
     for match in BENCHMARK_ROW.finditer(text):
         rows[match.group(1)] = match.groups()[1:]
-    if set(rows) != set(DTYPES):
-        raise SystemExit(f"F32/F16 benchmark rows not found in {log}")
+    if set(rows) != set(CONFIGURATIONS):
+        raise SystemExit(f"all three activation benchmark rows not found in {log}")
 
     measurements: dict[str, Any] = {"benchmark": {}}
     names = (
-        "ttft_ms",
+        "small_prefill_ttft_ms",
+        "large_prefill_ttft_ms",
         "e2e_seconds",
         "decode_tokens_per_second",
         "starting_rss_mib",
@@ -128,11 +156,13 @@ def _parse_benchmark_log(log: Path) -> tuple[dict[str, Any], dict[str, int]]:
     )
     for index, name in enumerate(names):
         measurements["benchmark"][name] = {
-            dtype: float(rows[dtype][index]) for dtype in DTYPES
+            configuration: float(rows[configuration][index])
+            for configuration in CONFIGURATIONS
         }
     request = {
-        "input_token_count": int(request_match.group(1)),
-        "output_token_count": int(request_match.group(2)),
+        "small_prefill_input_token_count": int(request_match.group(1)),
+        "input_token_count": int(request_match.group(2)),
+        "output_token_count": int(request_match.group(3)),
     }
     return measurements, request
 
@@ -147,13 +177,13 @@ def _record_trace_phase(
 
     for span in SUMMARY_SPANS:
         values = {
-            dtype: (
+            configuration: (
                 forward.duration_microseconds
                 if span == "model"
                 else forward.aggregate(span).total_microseconds
             )
             / 1_000
-            for dtype, forward in forwards.items()
+            for configuration, forward in forwards.items()
         }
         if any(values.values()):
             phase_measurements["summary"][span] = values
@@ -169,11 +199,11 @@ def _record_trace_phase(
     )
     for operation in operations:
         phase_measurements["qmatmul"][operation] = {
-            dtype: forward.aggregate(
+            configuration: forward.aggregate(
                 "qmatmul", operation=operation
             ).total_microseconds
             / 1_000
-            for dtype, forward in forwards.items()
+            for configuration, forward in forwards.items()
         }
 
     attention_keys = sorted(
@@ -191,8 +221,8 @@ def _record_trace_phase(
         if args_tuple:
             label += "[" + ",".join(f"{key}={value}" for key, value in args_tuple) + "]"
         phase_measurements["attention"][label] = {
-            dtype: forward.aggregate(name, **args).total_microseconds / 1_000
-            for dtype, forward in forwards.items()
+            configuration: forward.aggregate(name, **args).total_microseconds / 1_000
+            for configuration, forward in forwards.items()
         }
 
 
@@ -204,7 +234,7 @@ def _aggregate(result_paths: list[Path]) -> None:
         path = path.expanduser().resolve()
         with path.open() as file:
             document = json.load(file)
-        if document.get("schema_version") != 1:
+        if document.get("schema_version") != 4:
             raise SystemExit(f"unsupported result schema in {path}")
         documents.append(document)
 
@@ -212,7 +242,29 @@ def _aggregate(result_paths: list[Path]) -> None:
     if any(document["request"] != request for document in documents[1:]):
         raise SystemExit("result files describe different benchmark requests")
 
-    flattened = [_flatten(document["measurements"]) for document in documents]
+    _print_aggregate(
+        [document["measurements"] for document in documents],
+        request,
+    )
+
+
+def _aggregate_logs(log_paths: list[Path]) -> None:
+    if len(log_paths) < 2:
+        raise SystemExit("aggregate-logs requires at least two benchmark logs")
+    parsed = [
+        _parse_benchmark_log(path.expanduser().resolve()) for path in log_paths
+    ]
+    request = parsed[0][1]
+    if any(parsed_request != request for _, parsed_request in parsed[1:]):
+        raise SystemExit("benchmark logs describe different requests")
+    _print_aggregate([measurements for measurements, _ in parsed], request)
+
+
+def _print_aggregate(
+    measurements: list[dict[str, Any]],
+    request: dict[str, int],
+) -> None:
+    flattened = [_flatten(run) for run in measurements]
     keys = sorted(flattened[0])
     if any(sorted(result) != keys for result in flattened[1:]):
         raise SystemExit("result files contain different measurement sets")
@@ -222,27 +274,32 @@ def _aggregate(result_paths: list[Path]) -> None:
         if not key.endswith(".F32"):
             continue
         base = key.removesuffix(".F32")
-        f16_key = f"{base}.F16"
         f32 = [result[key] for result in flattened]
-        f16 = [result[f16_key] for result in flattened]
-        rows.append(
-            (
-                base,
-                _distribution(f32),
-                _distribution(f16),
-                f"{mean(f16) / mean(f32):.3f}x" if mean(f32) else "-",
-            )
-        )
+        distributions = []
+        ratios = []
+        for configuration in CONFIGURATIONS:
+            values = [result[f"{base}.{configuration}"] for result in flattened]
+            distributions.append(_distribution(values))
+            if configuration != "F32":
+                ratios.append(
+                    f"{mean(values) / mean(f32):.3f}x" if mean(f32) else "-"
+                )
+        rows.append((base, *distributions, *ratios))
 
     print(
-        f"Activation benchmark aggregate: {len(documents)} runs, "
+        f"Activation benchmark aggregate: {len(measurements)} runs, "
+        f"{request['small_prefill_input_token_count']} small-prefill tokens, "
         f"{request['input_token_count']} input tokens, "
         f"{request['output_token_count']} output tokens"
     )
     print(
         tabulate(
             rows,
-            headers=("Measurement", "F32 mean ± SD", "F16 mean ± SD", "F16/F32"),
+            headers=(
+                "Measurement",
+                *(f"{configuration} mean ± SD" for configuration in CONFIGURATIONS),
+                *(f"{configuration}/F32" for configuration in CONFIGURATIONS[1:]),
+            ),
             tablefmt="simple",
         )
     )
