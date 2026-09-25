@@ -77,7 +77,9 @@ Compare contiguous and paged CPU attention with repeated-KV/grouped-Q and
 concatenated/page-wise value matmul:
 
 ```shell
-python3 main.py --benchmark cpu_paged_attention
+python3 main.py --benchmark cpu_paged_attention_f32
+# Or test the same attention configurations with F16 activations:
+python3 main.py --benchmark cpu_paged_attention_f16
 ```
 
 The prefix-caching benchmark sends the same request twice to demonstrate prefix

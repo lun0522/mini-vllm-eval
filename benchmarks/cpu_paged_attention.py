@@ -14,7 +14,9 @@ from benchmarks.base import Benchmark
 from benchmarks.base import BenchmarkCase
 from benchmarks.base import GenerationMetrics
 from benchmarks.base import QWEN_SMALL_MODEL
+from benchmarks.example_prompts import EXAMPLE_LONG_PROMPT_1
 from benchmarks.example_prompts import EXAMPLE_SHORT_PROMPT_1
+from benchmarks.example_prompts import EXAMPLE_SHORT_PROMPT_2
 from process_metrics import ProcessTreeRssSampler
 from process_metrics import RssMetrics
 from proto_loader import ProtoModules
@@ -27,11 +29,19 @@ CPU_GROUPED_QUERY_MATMUL_ENVIRONMENT_VARIABLE = (
 CPU_PAGEWISE_VALUE_MATMUL_ENVIRONMENT_VARIABLE = (
     "MINI_VLLM_ENABLE_CPU_PAGEWISE_VALUE_MATMUL"
 )
-MAX_NEW_TOKEN_COUNTS = (1, 512, 2048)
+CPU_F16_QMATMUL_ENVIRONMENT_VARIABLE = (
+    "MINI_VLLM_ENABLE_CPU_F16_QMATMUL_VIA_F32"
+)
+
+WARMUP_REQUEST = ("Warm-Up", EXAMPLE_SHORT_PROMPT_1, 1)
+SMALL_PREFILL_REQUEST = ("Small-Prefill", EXAMPLE_SHORT_PROMPT_2, 1)
+LONG_REQUEST = ("Long-Request", EXAMPLE_LONG_PROMPT_1, 1024)
+MEASURED_REQUESTS = (SMALL_PREFILL_REQUEST, LONG_REQUEST)
 
 
 @dataclass(frozen=True)
 class CpuPagedAttentionRequestResult:
+    name: str
     max_new_tokens: int
     metrics: GenerationMetrics
     rss_metrics: RssMetrics | None
@@ -46,18 +56,32 @@ class CpuPagedAttentionCaseResult:
 
 
 class CpuPagedAttentionBenchmark(Benchmark):
+    def __init__(self, activation_dtype: str) -> None:
+        if activation_dtype not in ("f32", "f16"):
+            raise ValueError(f"unsupported activation dtype: {activation_dtype}")
+        self.activation_dtype = activation_dtype
+
     def server_flags(self) -> list[str]:
-        return [
+        flags = [
             "--model",
             QWEN_SMALL_MODEL,
             "--kv-cache-type",
             "paged:16",
             "--inference-device",
             "cpu",
+            "--max-batched-token-count",
+            "1024",
         ]
+        flags.extend(("--activation-dtype", self.activation_dtype))
+        return flags
 
     def cases(self) -> tuple[BenchmarkCase, ...]:
         server_flags = tuple(self.server_flags())
+        f16_environment = (
+            ((CPU_F16_QMATMUL_ENVIRONMENT_VARIABLE, "true"),)
+            if self.activation_dtype == "f16"
+            else ()
+        )
         return tuple(
             BenchmarkCase(
                 f"{attention_name}, {query_matmul_name}, {value_matmul_name}",
@@ -75,7 +99,8 @@ class CpuPagedAttentionBenchmark(Benchmark):
                         CPU_PAGEWISE_VALUE_MATMUL_ENVIRONMENT_VARIABLE,
                         str(pagewise_value_matmul_enabled).lower(),
                     ),
-                ),
+                )
+                + f16_environment,
             )
             for (
                 paged_attention_enabled,
@@ -106,25 +131,32 @@ class CpuPagedAttentionBenchmark(Benchmark):
             grouped_query_matmul_enabled,
             pagewise_value_matmul_enabled,
         ) = self._case_mode(case)
-        warmup_result = self._run_request(client, proto, MAX_NEW_TOKEN_COUNTS[0])
+        warmup_result = self._run_request(
+            client,
+            proto,
+            *WARMUP_REQUEST,
+        )
+        small_prefill_result = self._run_request(
+            client,
+            proto,
+            *SMALL_PREFILL_REQUEST,
+        )
         sampler = ProcessTreeRssSampler(process.pid)
         sampler.start()
         try:
-            measured_results = tuple(
-                self._run_request(client, proto, max_new_tokens)
-                for max_new_tokens in MAX_NEW_TOKEN_COUNTS[1:]
+            long_request_result = self._run_request(
+                client,
+                proto,
+                *LONG_REQUEST,
             )
         finally:
             rss_metrics = sampler.stop()
-        measured_results = (
-            *measured_results[:-1],
-            replace(measured_results[-1], rss_metrics=rss_metrics),
-        )
+        long_request_result = replace(long_request_result, rss_metrics=rss_metrics)
         return CpuPagedAttentionCaseResult(
             paged_attention_enabled=paged_attention_enabled,
             grouped_query_matmul_enabled=grouped_query_matmul_enabled,
             pagewise_value_matmul_enabled=pagewise_value_matmul_enabled,
-            requests=(warmup_result, *measured_results),
+            requests=(warmup_result, small_prefill_result, long_request_result),
         )
 
     def report_results(
@@ -161,14 +193,14 @@ class CpuPagedAttentionBenchmark(Benchmark):
                 "CPU paged-attention benchmark requires all six attention/layout results"
             )
 
-        for max_new_tokens, table in self._format_comparisons(results_by_mode):
+        for request_name, table in self._format_comparisons(results_by_mode):
             logger.info(
-                "CPU attention comparison with output token limit {}:\n{}",
-                max_new_tokens,
+                "CPU attention comparison for {}:\n{}",
+                request_name,
                 table,
             )
         logger.info(
-            "Peak RSS comparison after the 1-token warm-up:\n{}",
+            "Peak RSS comparison during the large request:\n{}",
             self._format_rss_comparison(results_by_mode),
         )
 
@@ -176,10 +208,12 @@ class CpuPagedAttentionBenchmark(Benchmark):
         self,
         client: Any,
         proto: ProtoModules,
+        name: str,
+        prompt: str,
         max_new_tokens: int,
     ) -> CpuPagedAttentionRequestResult:
         request = proto.request_handler.GenerateText(
-            prompt=EXAMPLE_SHORT_PROMPT_1,
+            prompt=prompt,
             max_new_tokens=max_new_tokens,
             repeat_penalty=1.1,
             repeat_last_n=64,
@@ -187,7 +221,8 @@ class CpuPagedAttentionBenchmark(Benchmark):
             ignore_eos_tokens=True,
         )
         logger.warning(
-            "Sending request with max_new_tokens={}",
+            "Sending {} request with max_new_tokens={}",
+            name,
             max_new_tokens,
         )
         metrics = None
@@ -199,6 +234,7 @@ class CpuPagedAttentionBenchmark(Benchmark):
                 f"{max_new_tokens}-token request completed without statistics"
             )
         return CpuPagedAttentionRequestResult(
+            name=name,
             max_new_tokens=max_new_tokens,
             metrics=metrics,
             rss_metrics=None,
@@ -240,24 +276,29 @@ class CpuPagedAttentionBenchmark(Benchmark):
     def _format_comparisons(
         cls,
         results_by_mode: dict[tuple[bool, bool, bool], CpuPagedAttentionCaseResult],
-    ) -> tuple[tuple[int, str], ...]:
+    ) -> tuple[tuple[str, str], ...]:
         requests_by_mode = {
-            mode: {
-                request.max_new_tokens: request for request in result.requests
-            }
+            mode: {request.name: request for request in result.requests}
             for mode, result in results_by_mode.items()
         }
+        expected_requests = {
+            request_name
+            for request_name, _prompt, _max_new_tokens in (
+                WARMUP_REQUEST,
+                *MEASURED_REQUESTS,
+            )
+        }
         for mode, requests in requests_by_mode.items():
-            if set(requests) != set(MAX_NEW_TOKEN_COUNTS):
+            if set(requests) != expected_requests:
                 raise RuntimeError(
-                    f"results for mode {mode} do not contain the expected token limits"
+                    f"results for mode {mode} do not contain the expected requests"
                 )
 
         tables = []
-        for max_new_tokens in MAX_NEW_TOKEN_COUNTS:
+        for request_name, _prompt, max_new_tokens in MEASURED_REQUESTS:
             rows = []
             metrics_by_mode = {
-                mode: requests[max_new_tokens].metrics
+                mode: requests[request_name].metrics
                 for mode, requests in requests_by_mode.items()
             }
             cls._validate_comparable_metrics(max_new_tokens, metrics_by_mode)
@@ -313,7 +354,7 @@ class CpuPagedAttentionBenchmark(Benchmark):
 
             tables.append(
                 (
-                    max_new_tokens,
+                    request_name,
                     tabulate(
                         rows,
                         headers=(
@@ -348,14 +389,16 @@ class CpuPagedAttentionBenchmark(Benchmark):
             (True, True, True),
         ):
             result = results_by_mode[mode]
-            requests = {
-                request.max_new_tokens: request for request in result.requests
-            }
-            request = requests.get(2048)
+            requests = {request.name: request for request in result.requests}
+            request = requests.get(LONG_REQUEST[0])
             if request is None:
-                raise RuntimeError(f"results for mode {mode} do not contain 2048 tokens")
+                raise RuntimeError(
+                    f"results for mode {mode} do not contain the large request"
+                )
             if request.rss_metrics is None:
-                raise RuntimeError(f"2048-token result for mode {mode} has no RSS metrics")
+                raise RuntimeError(
+                    f"large-request result for mode {mode} has no RSS metrics"
+                )
 
             (
                 paged_attention_enabled,
