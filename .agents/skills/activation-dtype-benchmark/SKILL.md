@@ -13,9 +13,13 @@ Use untraced runs for TTFT, end-to-end latency, decode throughput, and RSS.
 Run the benchmark five times, saving each invocation to a separate log:
 
 ```shell
+set -o pipefail
 .venv/bin/python3 main.py \
   --benchmark cpu_activation_dtype 2>&1 | tee BENCHMARK_LOG
 ```
+
+Keep `pipefail` enabled so a benchmark failure is not hidden by a successful
+`tee` process.
 
 Aggregate the five logs:
 
@@ -40,6 +44,7 @@ measurements.
 2. Run one `cpu_activation_dtype` benchmark invocation with tracing, saving its combined output to a log. The benchmark runs F32, unoptimized F16, and F16 with QMatMul via F32:
 
    ```shell
+   set -o pipefail
    .venv/bin/python3 main.py \
      --benchmark cpu_activation_dtype \
      --trace-directory TRACE_DIRECTORY 2>&1 | tee BENCHMARK_LOG
@@ -52,6 +57,7 @@ measurements.
    those traces, saving the output for later documentation:
 
    ```shell
+   set -o pipefail
    .venv/bin/python3 \
      .agents/skills/activation-dtype-benchmark/scripts/activation_traces.py \
      F32_TRACE F16_TRACE F16_QMATMUL_TRACE | tee TRACE_ANALYSIS

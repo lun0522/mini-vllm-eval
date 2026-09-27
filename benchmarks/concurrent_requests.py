@@ -141,7 +141,11 @@ class ConcurrentRequestsBenchmark(Benchmark):
                         str(metrics.output_token_count),
                         cls._format_optional(metrics.time_to_first_token_microseconds),
                         cls._format_optional(metrics.end_to_end_latency_microseconds),
-                        cls._format_acceptance(metrics.draft_token_acceptance_rate),
+                        cls._format_acceptance(
+                            None
+                            if metrics.draft_token_metrics is None
+                            else metrics.draft_token_metrics.acceptance_rate
+                        ),
                         f"{result.wall_time_seconds:.3f}",
                         f"{output_tokens_per_second:.2f}",
                     )

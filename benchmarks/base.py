@@ -29,6 +29,10 @@ QWEN_SMALL_MODEL = (
     'model_filename: "Qwen2.5-0.5B-Instruct-Q4_K_M.gguf" '
     'tokenizer_id: "Qwen/Qwen2.5-7B-Instruct"'
 )
+QWEN_SMALL_DRAFT_MODEL = (
+    f"model {{ {QWEN_SMALL_MODEL} }} "
+    "token_count_policy { fixed { draft_token_count: 4 } }"
+)
 LLAMA_LARGE_MODEL = (
     'model_id: "bartowski/Meta-Llama-3.1-8B-Instruct-GGUF" '
     'model_filename: "Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf" '
@@ -49,12 +53,25 @@ class BenchmarkCase:
 
 
 @dataclass(frozen=True)
+class DraftTokenMetrics:
+    accepted_token_count: int
+    proposed_token_count: int
+    selected_token_count_histogram: tuple[tuple[int, int], ...]
+
+    @property
+    def acceptance_rate(self) -> float:
+        if self.proposed_token_count == 0:
+            return 0.0
+        return self.accepted_token_count / self.proposed_token_count
+
+
+@dataclass(frozen=True)
 class GenerationMetrics:
     input_token_count: int
     output_token_count: int
     time_to_first_token_microseconds: int | None
     end_to_end_latency_microseconds: int | None
-    draft_token_acceptance_rate: float | None
+    draft_token_metrics: DraftTokenMetrics | None
 
 
 class Benchmark(ABC):
@@ -96,13 +113,6 @@ class Benchmark(ABC):
                 logger.info("Benchmark finished; stopping mini-vllm-rs")
                 send_shutdown(proto)
 
-    # TODO: Make this an abstractmethod.
-    def report_results(
-        self,
-        results: list[tuple[BenchmarkCase, Any]],
-    ) -> None:
-        pass
-
     @abstractmethod
     def server_flags(self) -> list[str]:
         pass
@@ -117,11 +127,26 @@ class Benchmark(ABC):
     ) -> Any:
         pass
 
+    @abstractmethod
+    def report_results(
+        self,
+        results: list[tuple[BenchmarkCase, Any]],
+    ) -> None:
+        pass
+
     @staticmethod
     def generation_metrics(stats: Any) -> GenerationMetrics:
-        draft_token_acceptance_rate = None
-        if stats.HasField("draft_token_acceptance_rate"):
-            draft_token_acceptance_rate = stats.draft_token_acceptance_rate
+        draft_token_metrics = None
+        if stats.HasField("draft_token_stats"):
+            draft_stats = stats.draft_token_stats
+            draft_token_metrics = DraftTokenMetrics(
+                accepted_token_count=draft_stats.accepted_token_count,
+                proposed_token_count=draft_stats.proposed_token_count,
+                selected_token_count_histogram=tuple(
+                    (bucket.draft_token_count, bucket.usage_count)
+                    for bucket in draft_stats.selected_token_count_histogram
+                ),
+            )
         time_to_first_token_microseconds = None
         end_to_end_latency_microseconds = None
         if stats.HasField("token_generation_latency"):
@@ -136,16 +161,27 @@ class Benchmark(ABC):
             output_token_count=stats.output_token_count,
             time_to_first_token_microseconds=time_to_first_token_microseconds,
             end_to_end_latency_microseconds=end_to_end_latency_microseconds,
-            draft_token_acceptance_rate=draft_token_acceptance_rate,
+            draft_token_metrics=draft_token_metrics,
         )
 
     @classmethod
     def print_generation_stats(cls, stats: Any) -> None:
         metrics = cls.generation_metrics(stats)
         draft_acceptance_rate = "unavailable"
-        if metrics.draft_token_acceptance_rate is not None:
-            draft_acceptance_rate = (
-                f"{metrics.draft_token_acceptance_rate * 100:.1f}%"
+        draft_token_totals = "unavailable"
+        draft_token_histogram = "unavailable"
+        if metrics.draft_token_metrics is not None:
+            draft_metrics = metrics.draft_token_metrics
+            draft_acceptance_rate = f"{draft_metrics.acceptance_rate * 100:.1f}%"
+            draft_token_totals = (
+                f"{draft_metrics.accepted_token_count}/"
+                f"{draft_metrics.proposed_token_count}"
+            )
+            draft_token_histogram = ", ".join(
+                f"{token_count}:{usage_count}"
+                for token_count, usage_count in (
+                    draft_metrics.selected_token_count_histogram
+                )
             )
         logger.info(
             "Generation stats:\n"
@@ -153,12 +189,16 @@ class Benchmark(ABC):
             "\tOutput tokens: {}\n"
             "\tTime to first token: {} us\n"
             "\tEnd-to-end latency: {} us\n"
-            "\tDraft acceptance: {}",
+            "\tDraft acceptance: {}\n"
+            "\tDraft accepted/proposed: {}\n"
+            "\tDraft selected count:uses: {}",
             metrics.input_token_count,
             metrics.output_token_count,
             _format_optional_metric(metrics.time_to_first_token_microseconds),
             _format_optional_metric(metrics.end_to_end_latency_microseconds),
             draft_acceptance_rate,
+            draft_token_totals,
+            draft_token_histogram,
         )
 
 

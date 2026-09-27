@@ -42,6 +42,18 @@ Run two generation requests concurrently:
 python3 main.py --benchmark concurrent_requests
 ```
 
+Compare target-only decoding with fixed-4, acceptance-rate adaptive, and
+accepted-length adaptive speculative decoding on two similarly sized workloads.
+It reports per-workload decode throughput, latency, acceptance totals, and
+policy-selected draft-count histograms.
+
+```shell
+python3 main.py --benchmark speculative_decoding
+```
+
+For repeated measurement and interpretation, use the
+`speculative-decoding-benchmark` skill.
+
 Compare three CPU activation configurations: F32, unoptimized F16, and F16
 using quantized matmul via F32. Each case uses a short one-token warm-up, a
 distinct short-prompt request producing one token, and a long-prompt request

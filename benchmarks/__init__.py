@@ -5,6 +5,7 @@ from benchmarks.cpu_activation_dtype import CpuActivationDtypeBenchmark
 from benchmarks.cpu_paged_attention import CpuPagedAttentionBenchmark
 from benchmarks.prefix_caching import PrefixCachingBenchmark
 from benchmarks.simple_generation import SimpleGenerationBenchmark
+from benchmarks.speculative_decoding import SpeculativeDecodingBenchmark
 
 
 BENCHMARKS = {
@@ -14,4 +15,5 @@ BENCHMARKS = {
     "cpu_paged_attention_f16": CpuPagedAttentionBenchmark("f16"),
     "prefix_caching": PrefixCachingBenchmark(),
     "simple_generation": SimpleGenerationBenchmark(),
+    "speculative_decoding": SpeculativeDecodingBenchmark(),
 }

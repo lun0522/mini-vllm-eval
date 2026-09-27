@@ -25,12 +25,16 @@ cargo build --release --manifest-path ../mini-vllm-rs/Cargo.toml
 Run each activation dtype five times, saving every invocation to its own log:
 
 ```shell
+set -o pipefail
 .venv/bin/python3 main.py \
   --benchmark cpu_paged_attention_f32 2>&1 | tee F32_LOG
 
 .venv/bin/python3 main.py \
   --benchmark cpu_paged_attention_f16 2>&1 | tee F16_LOG
 ```
+
+Keep `pipefail` enabled so a benchmark failure is not hidden by a successful
+`tee` process.
 
 Run cases sequentially. Parallel runs compete for CPU and memory bandwidth and
 make both latency and RSS results unreliable. A failed or interrupted invocation
