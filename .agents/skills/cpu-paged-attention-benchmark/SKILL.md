@@ -9,6 +9,14 @@ Run experiments from the `mini-vllm-eval` repository root. The benchmark covers
 the same six attention configurations for F32 and F16. Keep repetition and
 aggregation outside the benchmark implementation.
 
+## Execution Environment
+
+Run release builds and every benchmark invocation, including smoke tests and
+traced runs, outside the sandbox from the outset. Request approval before the
+first such command when required. Sandboxing can prevent device discovery or
+process inspection, so do not count a sandboxed sample or wait for it to fail
+before escalating. Offline log and trace analysis may run inside the sandbox.
+
 ## Collect Results
 
 Build the release binary before collecting samples so compilation does not add

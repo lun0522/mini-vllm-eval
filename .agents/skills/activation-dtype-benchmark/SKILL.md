@@ -7,6 +7,14 @@ description: Benchmark three mini-vllm CPU activation configurations using repea
 
 Run experiments from the `mini-vllm-eval` repository root. Keep repetition orchestration outside the benchmark implementation.
 
+## Execution Environment
+
+Run release builds and every benchmark invocation, including smoke tests and
+traced runs, outside the sandbox from the outset. Request approval before the
+first such command when required. Sandboxing can prevent device discovery or
+process inspection, so do not count a sandboxed sample or wait for it to fail
+before escalating. Offline log and trace analysis may run inside the sandbox.
+
 ## Overall Performance and Memory
 
 Use untraced runs for TTFT, end-to-end latency, decode throughput, and RSS.

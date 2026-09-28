@@ -15,5 +15,6 @@ BENCHMARKS = {
     "cpu_paged_attention_f16": CpuPagedAttentionBenchmark("f16"),
     "prefix_caching": PrefixCachingBenchmark(),
     "simple_generation": SimpleGenerationBenchmark(),
-    "speculative_decoding": SpeculativeDecodingBenchmark(),
+    "speculative_decoding_qwen": SpeculativeDecodingBenchmark("qwen"),
+    "speculative_decoding_llama": SpeculativeDecodingBenchmark("llama"),
 }

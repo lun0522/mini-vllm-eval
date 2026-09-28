@@ -13,6 +13,8 @@ from benchmarks.base import Benchmark
 from benchmarks.base import BenchmarkCase
 from benchmarks.base import DraftTokenMetrics
 from benchmarks.base import GenerationMetrics
+from benchmarks.base import LLAMA_LARGE_MODEL
+from benchmarks.base import LLAMA_SMALL_MODEL
 from benchmarks.base import QWEN_LARGE_MODEL
 from benchmarks.base import QWEN_SMALL_MODEL
 from benchmarks.example_prompts import EXAMPLE_SHORT_PROMPT_1
@@ -37,6 +39,10 @@ WORKLOADS = (
 GPU_ENVIRONMENT = (
     ("MINI_VLLM_METAL_GEMV_MAX_ROWS", "4"),
 )
+MODEL_FAMILIES = {
+    "qwen": (QWEN_LARGE_MODEL, QWEN_SMALL_MODEL),
+    "llama": (LLAMA_LARGE_MODEL, LLAMA_SMALL_MODEL),
+}
 
 
 @dataclass(frozen=True)
@@ -53,10 +59,20 @@ class SpeculativeCaseResult:
 
 
 class SpeculativeDecodingBenchmark(Benchmark):
+    def __init__(self, model_family: str) -> None:
+        try:
+            self.target_model, self.draft_model = MODEL_FAMILIES[model_family]
+        except KeyError as error:
+            supported = ", ".join(MODEL_FAMILIES)
+            raise ValueError(
+                f"unsupported model family {model_family!r}; expected one of: {supported}"
+            ) from error
+        self.model_family = model_family
+
     def server_flags(self) -> list[str]:
         return [
             "--model",
-            QWEN_LARGE_MODEL,
+            self.target_model,
             "--kv-cache-type",
             "contiguous",
             "--inference-device",
@@ -112,9 +128,8 @@ class SpeculativeDecodingBenchmark(Benchmark):
             ),
         )
 
-    @staticmethod
-    def _draft_model(policy: str) -> str:
-        return f"model {{ {QWEN_SMALL_MODEL} }} token_count_policy {{ {policy} }}"
+    def _draft_model(self, policy: str) -> str:
+        return f"model {{ {self.draft_model} }} token_count_policy {{ {policy} }}"
 
     def run_benchmark(
         self,
@@ -142,11 +157,13 @@ class SpeculativeDecodingBenchmark(Benchmark):
     ) -> None:
         results_by_case = self._validated_results(results)
         logger.info(
-            "Speculative-decoding performance:\n{}",
+            "{} speculative-decoding performance:\n{}",
+            self.model_family,
             self._performance_table(results_by_case),
         )
         logger.info(
-            "Speculative-decoding policy behavior:\n{}",
+            "{} speculative-decoding policy behavior:\n{}",
+            self.model_family,
             self._draft_stats_table(results_by_case),
         )
 

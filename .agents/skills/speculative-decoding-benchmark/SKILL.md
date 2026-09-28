@@ -5,9 +5,21 @@ description: Run and interpret the mini-vllm speculative-decoding policy benchma
 
 # Speculative Decoding Benchmark
 
-Run from the `mini-vllm-eval` repository root. The benchmark owns models,
-prompts, policy parameters, warm-up, output length, validation, and reporting;
-do not duplicate or override them in the measurement workflow.
+Run from the `mini-vllm-eval` repository root. The human user will specify
+whether to run `speculative_decoding_qwen`, `speculative_decoding_llama`, or
+both. If they do not specify, ask which of those three options they want before
+starting. Use the same model family for every run in a measurement series; when
+both are requested, run and analyze them as separate series. The benchmark owns
+model pairs, prompts, policy parameters, warm-up, output length, validation, and
+reporting; do not duplicate or override them in the measurement workflow.
+
+## Execution Environment
+
+Run release builds and every benchmark invocation, including smoke tests and
+traced runs, outside the sandbox from the outset. Request approval before the
+first such command when required. Sandboxing can prevent device discovery or
+process inspection, so do not count a sandboxed sample or wait for it to fail
+before escalating. Offline log and trace analysis may run inside the sandbox.
 
 ## Smoke Test
 
@@ -15,7 +27,7 @@ After changing the benchmark or speculative-decoding implementation, run one
 complete invocation to verify all cases and workloads:
 
 ```shell
-.venv/bin/python3 main.py --benchmark speculative_decoding
+.venv/bin/python3 main.py --benchmark speculative_decoding_qwen
 ```
 
 Treat this as a functional check, not a publishable performance result.
@@ -28,8 +40,11 @@ conditions. Save each invocation to a separate log:
 ```shell
 set -o pipefail
 .venv/bin/python3 main.py \
-  --benchmark speculative_decoding 2>&1 | tee BENCHMARK_LOG
+  --benchmark speculative_decoding_qwen 2>&1 | tee BENCHMARK_LOG
 ```
+
+Replace `speculative_decoding_qwen` with `speculative_decoding_llama` to measure
+the Llama pair. Do not combine runs from different model families.
 
 Keep `pipefail` enabled so a benchmark failure is not hidden by a successful
 `tee` process.
