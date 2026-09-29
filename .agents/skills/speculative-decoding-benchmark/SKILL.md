@@ -1,6 +1,6 @@
 ---
 name: speculative-decoding-benchmark
-description: Run and interpret the mini-vllm speculative-decoding policy benchmark using repeated untraced samples. Use when validating or comparing fixed, acceptance-rate, accepted-length, and target-only decoding performance.
+description: Run and interpret the mini-vllm speculative-decoding policy benchmark using repeated untraced samples. Use when validating or comparing fixed, acceptance-rate, accepted-length, target-only, and standalone draft-model performance.
 ---
 
 # Speculative Decoding Benchmark
@@ -60,6 +60,9 @@ system, and relevant environment overrides with reported measurements.
 ## Interpretation
 
 - Use per-workload decode throughput as the primary policy comparison.
+- Use the standalone draft-model case as a cost proxy. Do not treat it as a
+  speculative policy or as isolated timing of draft execution inside the
+  speculative loop.
 - Retain E2E latency as the complete-request measure and TTFT as a diagnostic
   for target and draft prefill cost.
 - Use accepted/proposed totals and selected-count histograms to explain policy

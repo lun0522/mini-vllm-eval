@@ -24,12 +24,14 @@ from proto_loader import ProtoModules
 
 
 TARGET_ONLY = "Target only"
+DRAFT_ONLY = "Draft model only"
 FIXED = "Fixed 4"
 ADAPTIVE_MAX_DRAFT_TOKEN_COUNT = 8
 MAX_INPUT_TOKEN_COUNT_DIFFERENCE_FRACTION = 0.15
 ACCEPTANCE_RATE = f"Acceptance rate 1-{ADAPTIVE_MAX_DRAFT_TOKEN_COUNT}"
 ACCEPTED_LENGTH = f"Accepted length 1-{ADAPTIVE_MAX_DRAFT_TOKEN_COUNT}"
 CASE_ORDER = (TARGET_ONLY, FIXED, ACCEPTANCE_RATE, ACCEPTED_LENGTH)
+ALL_CASE_ORDER = (*CASE_ORDER, DRAFT_ONLY)
 MAX_NEW_TOKENS = 512
 TARGET_KV_CACHE_SIZE_BYTES = 1024 * 1024 * 1024
 WORKLOADS = (
@@ -70,9 +72,13 @@ class SpeculativeDecodingBenchmark(Benchmark):
         self.model_family = model_family
 
     def server_flags(self) -> list[str]:
+        return self._server_flags(self.target_model)
+
+    @staticmethod
+    def _server_flags(model: str) -> list[str]:
         return [
             "--model",
-            self.target_model,
+            model,
             "--kv-cache-type",
             "contiguous",
             "--inference-device",
@@ -126,6 +132,11 @@ class SpeculativeDecodingBenchmark(Benchmark):
                 ),
                 GPU_ENVIRONMENT,
             ),
+            BenchmarkCase(
+                DRAFT_ONLY,
+                tuple(self._server_flags(self.draft_model)),
+                GPU_ENVIRONMENT,
+            ),
         )
 
     def _draft_model(self, policy: str) -> str:
@@ -160,6 +171,11 @@ class SpeculativeDecodingBenchmark(Benchmark):
             "{} speculative-decoding performance:\n{}",
             self.model_family,
             self._performance_table(results_by_case),
+        )
+        logger.info(
+            "{} standalone draft-model cost proxy:\n{}",
+            self.model_family,
+            self._draft_model_performance_table(results_by_case),
         )
         logger.info(
             "{} speculative-decoding policy behavior:\n{}",
@@ -214,8 +230,8 @@ class SpeculativeDecodingBenchmark(Benchmark):
             if result.configuration != case.name or case.name in results_by_case:
                 raise RuntimeError(f"invalid or duplicate result for case {case.name}")
             results_by_case[case.name] = result
-        if set(results_by_case) != set(CASE_ORDER):
-            raise RuntimeError("speculative-decoding benchmark requires all four cases")
+        if set(results_by_case) != set(ALL_CASE_ORDER):
+            raise RuntimeError("speculative-decoding benchmark requires all five cases")
 
         expected_workloads = {name for name, _prompt in WORKLOADS}
         requests_by_case = {
@@ -261,9 +277,11 @@ class SpeculativeDecodingBenchmark(Benchmark):
             )
         cls._required_latencies(metrics)
         draft = metrics.draft_token_metrics
-        if case_name == TARGET_ONLY:
+        if case_name in (TARGET_ONLY, DRAFT_ONLY):
             if draft is not None:
-                raise RuntimeError("target-only generation returned draft-token statistics")
+                raise RuntimeError(
+                    f"non-speculative case {case_name} returned draft-token statistics"
+                )
             return
         if draft is None:
             raise RuntimeError(f"{case_name} did not return draft-token statistics")
@@ -356,6 +374,45 @@ class SpeculativeDecodingBenchmark(Benchmark):
             ttft,
             e2e,
             decode_tokens * 1_000_000 / decode_microseconds,
+        )
+
+    @classmethod
+    def _draft_model_performance_table(
+        cls,
+        results_by_case: dict[str, SpeculativeCaseResult],
+    ) -> str:
+        requests_by_case = {
+            case_name: {request.workload: request for request in result.requests}
+            for case_name, result in results_by_case.items()
+        }
+        rows = []
+        for workload, _prompt in WORKLOADS:
+            target = cls._request_metrics(requests_by_case[TARGET_ONLY][workload])
+            draft = cls._request_metrics(requests_by_case[DRAFT_ONLY][workload])
+            input_tokens, output_tokens, ttft, e2e, decode_rate = draft
+            rows.append(
+                (
+                    workload,
+                    str(input_tokens),
+                    str(output_tokens),
+                    f"{decode_rate:.2f}",
+                    f"{decode_rate / target[4]:.2f}x",
+                    f"{e2e / 1_000_000:.3f}",
+                    f"{ttft / 1_000:.3f}",
+                )
+            )
+        return tabulate(
+            rows,
+            headers=(
+                "Workload",
+                "Input",
+                "Output",
+                "Decode (tok/s)",
+                "vs target",
+                "E2E (s)",
+                "TTFT (ms)",
+            ),
+            tablefmt="simple",
         )
 
     @classmethod

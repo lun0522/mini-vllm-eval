@@ -1,13 +1,12 @@
 """Workloads for comparing speculative-decoding draft-token policies."""
 
 CODE_REFACTORING_PROMPT = r'''
-Refactor the Python module below. Introduce one private helper named
-`_validated_fields(record, required_fields)` that returns the stripped string values for
-the requested fields and raises `ValueError("missing <field>")` for a missing or blank value.
-Replace every repeated validation block with that helper. Preserve every public function
-signature, result dictionary, event name, field order, comment, and observable behavior.
-Return the complete refactored module, including imports and every function. Output Python code
-only, without Markdown fences, explanations, ellipses, or omitted sections.
+Refactor the Python module below by renaming the `record` parameter to `payload` in every public
+function and updating every reference to that parameter. Make no other code changes: do not
+extract helpers, consolidate validation, rename local variables, reorder functions or fields, or
+alter imports, annotations, comments, event names, error messages, result dictionaries, or
+observable behavior. Return the complete refactored module, including imports and every function.
+Output Python code only, without Markdown fences, explanations, ellipses, or omitted sections.
 
 from collections.abc import Mapping
 from typing import Any

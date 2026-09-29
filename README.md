@@ -45,8 +45,9 @@ python3 main.py --benchmark concurrent_requests
 Compare target-only decoding with fixed-4, acceptance-rate adaptive, and
 accepted-length adaptive speculative decoding on two similarly sized workloads.
 The Qwen benchmark uses Qwen2.5 7B and 0.5B; the Llama benchmark uses Llama 3.1
-8B and Llama 3.2 1B. Both report per-workload decode throughput, latency,
-acceptance totals, and policy-selected draft-count histograms.
+8B and Llama 3.2 1B. Both also run the draft model by itself as a standalone
+cost proxy and report per-workload decode throughput, latency, acceptance
+totals, and policy-selected draft-count histograms.
 
 ```shell
 python3 main.py --benchmark speculative_decoding_qwen
