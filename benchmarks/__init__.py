@@ -1,6 +1,6 @@
 """Available mini-vllm benchmarks."""
 
-from benchmarks.concurrent_requests import ConcurrentRequestsBenchmark
+from benchmarks.continuous_batching import ContinuousBatchingBenchmark
 from benchmarks.cpu_activation_dtype import CpuActivationDtypeBenchmark
 from benchmarks.cpu_paged_attention import CpuPagedAttentionBenchmark
 from benchmarks.prefix_caching import PrefixCachingBenchmark
@@ -9,7 +9,7 @@ from benchmarks.speculative_decoding import SpeculativeDecodingBenchmark
 
 
 BENCHMARKS = {
-    "concurrent_requests": ConcurrentRequestsBenchmark(),
+    "continuous_batching": ContinuousBatchingBenchmark(),
     "cpu_activation_dtype": CpuActivationDtypeBenchmark(),
     "cpu_paged_attention_f32": CpuPagedAttentionBenchmark("f32"),
     "cpu_paged_attention_f16": CpuPagedAttentionBenchmark("f16"),

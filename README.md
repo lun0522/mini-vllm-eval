@@ -36,11 +36,15 @@ Run the prefix-caching benchmark:
 python3 main.py --benchmark prefix_caching
 ```
 
-Run two generation requests concurrently:
+Compare serial admission with continuous batching using two-request and
+heterogeneous four-request workloads:
 
 ```shell
-python3 main.py --benchmark concurrent_requests
+python3 main.py --benchmark continuous_batching
 ```
+
+For repeated measurement and interpretation, use the
+`continuous-batching-benchmark` skill.
 
 Compare target-only decoding with fixed-4, acceptance-rate adaptive, and
 accepted-length adaptive speculative decoding on two similarly sized workloads.
