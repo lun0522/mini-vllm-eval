@@ -46,6 +46,16 @@ python3 main.py --benchmark continuous_batching
 For repeated measurement and interpretation, use the
 `continuous-batching-benchmark` skill.
 
+Compare first-come-first-served, shortest-prefill-first, and round-robin
+scheduling with a decoding anchor and three mixed-length follower prefills:
+
+```shell
+python3 main.py --benchmark scheduling_policies
+```
+
+For repeated measurement and interpretation, use the
+`scheduling-policy-benchmark` skill.
+
 Compare target-only decoding with fixed-4, acceptance-rate adaptive, and
 accepted-length adaptive speculative decoding on two similarly sized workloads.
 The Qwen benchmark uses Qwen2.5 7B and 0.5B; the Llama benchmark uses Llama 3.1
