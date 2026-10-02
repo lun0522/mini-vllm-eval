@@ -74,9 +74,13 @@ system, and relevant environment overrides with reported measurements.
 - For the two-request handoff, use follower TTFT reduction as the primary
   result. It measures how quickly a request arriving during decode begins
   producing output.
-- For the heterogeneous workload, inspect the individual short- and long-
-  prefill follower rows as well as the follower mean and maximum. Do not let
-  the average hide different prefill behavior.
+- For the serial heterogeneous case, use the follower mean and maximum for the
+  comparison. Concurrent input preprocessing can change backend arrival order,
+  so individual follower roles are diagnostic rather than matched queue
+  positions.
+- In the continuously batched heterogeneous case, also inspect individual
+  short- and long-prefill follower rows so the average does not hide different
+  prefill behavior.
 - Use aggregate output throughput to measure total work completed, and anchor
   E2E change to show the latency paid by the request already decoding. Present
   them together; continuous batching is a latency-throughput tradeoff.
