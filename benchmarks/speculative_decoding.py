@@ -79,16 +79,17 @@ class SpeculativeDecodingBenchmark(Benchmark):
         return [
             "--model",
             model,
-            "--kv-cache-type",
-            "contiguous",
+            "--kv-cache-config",
+            (
+                "kv_cache_type: KV_CACHE_TYPE_CONTIGUOUS "
+                f"target_kv_cache_size_bytes: {TARGET_KV_CACHE_SIZE_BYTES}"
+            ),
             "--inference-device",
             "gpu",
             "--activation-dtype",
             "f32",
-            "--target-kv-cache-size-bytes",
-            str(TARGET_KV_CACHE_SIZE_BYTES),
-            "--max-batched-token-count",
-            "1024",
+            "--scheduler-config",
+            "max_batched_token_count: 1024",
         ]
 
     def cases(self) -> tuple[BenchmarkCase, ...]:

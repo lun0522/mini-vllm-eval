@@ -154,25 +154,27 @@ class SchedulingPoliciesBenchmark(Benchmark):
 
     @staticmethod
     def _server_flags(policy: str) -> list[str]:
+        scheduling_policy = f"SCHEDULING_POLICY_{policy.upper().replace('-', '_')}"
         return [
             "--model",
             QWEN_LARGE_MODEL,
-            "--kv-cache-type",
-            "paged:16",
+            "--kv-cache-config",
+            (
+                "kv_cache_type: KV_CACHE_TYPE_PAGED per_page_token_count: 16 "
+                f"target_kv_cache_size_bytes: {TARGET_KV_CACHE_SIZE_BYTES}"
+            ),
             "--inference-device",
             "gpu",
             "--activation-dtype",
             "f32",
-            "--target-kv-cache-size-bytes",
-            str(TARGET_KV_CACHE_SIZE_BYTES),
-            "--max-batched-token-count",
-            str(MAX_BATCHED_TOKEN_COUNT),
-            "--max-active-request-count",
-            str(MAX_ACTIVE_REQUEST_COUNT),
+            "--scheduler-config",
+            (
+                f"max_batched_token_count: {MAX_BATCHED_TOKEN_COUNT} "
+                f"max_active_request_count: {MAX_ACTIVE_REQUEST_COUNT} "
+                f"scheduling_policy: {scheduling_policy}"
+            ),
             "--input-preprocessing-thread-count",
             "1",
-            "--scheduling-policy",
-            policy,
         ]
 
     def run_benchmark(

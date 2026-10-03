@@ -172,20 +172,21 @@ class ContinuousBatchingBenchmark(Benchmark):
             QWEN_LARGE_MODEL,
             "--draft-model",
             QWEN_SMALL_DRAFT_MODEL,
-            "--kv-cache-type",
-            "paged:16",
+            "--kv-cache-config",
+            (
+                "kv_cache_type: KV_CACHE_TYPE_PAGED per_page_token_count: 16 "
+                f"target_kv_cache_size_bytes: {TARGET_KV_CACHE_SIZE_BYTES}"
+            ),
             "--inference-device",
             "gpu",
             "--activation-dtype",
             "f32",
-            "--target-kv-cache-size-bytes",
-            str(TARGET_KV_CACHE_SIZE_BYTES),
-            "--max-batched-token-count",
-            str(MAX_BATCHED_TOKEN_COUNT),
-            "--max-active-request-count",
-            str(max_active_request_count),
-            "--scheduling-policy",
-            "first-come-first-served",
+            "--scheduler-config",
+            (
+                f"max_batched_token_count: {MAX_BATCHED_TOKEN_COUNT} "
+                f"max_active_request_count: {max_active_request_count} "
+                "scheduling_policy: SCHEDULING_POLICY_FIRST_COME_FIRST_SERVED"
+            ),
         ]
 
     def run_benchmark(

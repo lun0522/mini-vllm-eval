@@ -22,8 +22,8 @@ class SimpleGenerationBenchmark(Benchmark):
             QWEN_LARGE_MODEL,
             "--draft-model",
             QWEN_SMALL_DRAFT_MODEL,
-            "--kv-cache-type",
-            "paged-prefix:16",
+            "--kv-cache-config",
+            "kv_cache_type: KV_CACHE_TYPE_PAGED_PREFIX per_page_token_count: 16",
         ]
 
     def run_benchmark(

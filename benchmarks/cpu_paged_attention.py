@@ -65,12 +65,12 @@ class CpuPagedAttentionBenchmark(Benchmark):
         flags = [
             "--model",
             QWEN_SMALL_MODEL,
-            "--kv-cache-type",
-            "paged:16",
+            "--kv-cache-config",
+            "kv_cache_type: KV_CACHE_TYPE_PAGED per_page_token_count: 16",
             "--inference-device",
             "cpu",
-            "--max-batched-token-count",
-            "1024",
+            "--scheduler-config",
+            "max_batched_token_count: 1024",
         ]
         flags.extend(("--activation-dtype", self.activation_dtype))
         return flags
