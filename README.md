@@ -32,13 +32,18 @@ Generate one response and print its streamed output:
 python3 main.py --benchmark simple_generation
 ```
 
-### `prefix_caching`
+### `prefix_cache_reuse`
 
-Run the prefix-caching benchmark:
+Measure prefix-cache overlap, warm fan-out, cold-versus-warm bursts, and
+working-set churn against an ordinary paged-cache baseline:
 
 ```shell
-python3 main.py --benchmark prefix_caching
+python3 main.py --benchmark prefix_cache_reuse
 ```
+
+For report-quality repeated runs and deterministic result analysis, follow the
+[`prefix-cache-reuse-benchmark`](.agents/skills/prefix-cache-reuse-benchmark/SKILL.md)
+skill.
 
 ### `continuous_batching`
 

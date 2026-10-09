@@ -14,6 +14,7 @@ from grpc_tools import protoc
 class ProtoModules(NamedTuple):
     main_process: ModuleType
     main_process_grpc: ModuleType
+    model_runner: ModuleType
     request_handler: ModuleType
     request_handler_grpc: ModuleType
 
@@ -39,10 +40,10 @@ def generate_proto_modules(repository: Path, output_directory: Path) -> ProtoMod
 
     sys.path.insert(0, str(output_directory))
     try:
-        importlib.import_module("model_runner_pb2")
         return ProtoModules(
             main_process=importlib.import_module("main_process_pb2"),
             main_process_grpc=importlib.import_module("main_process_pb2_grpc"),
+            model_runner=importlib.import_module("model_runner_pb2"),
             request_handler=importlib.import_module("request_handler_pb2"),
             request_handler_grpc=importlib.import_module("request_handler_pb2_grpc"),
         )

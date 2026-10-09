@@ -262,6 +262,52 @@ class Benchmark(ABC):
             draft_token_histogram,
         )
 
+    @staticmethod
+    def print_prefix_cache_telemetry(backend: Any) -> None:
+        telemetry_by_role = [
+            ("Target", backend.target if backend.HasField("target") else None),
+            ("Draft", backend.draft if backend.HasField("draft") else None),
+        ]
+        available_telemetry = [
+            (model_role, telemetry)
+            for model_role, telemetry in telemetry_by_role
+            if telemetry is not None
+        ]
+        if not available_telemetry:
+            logger.info(
+                "Prefix-cache telemetry is unavailable for backend {}",
+                backend.backend_id,
+            )
+            return
+
+        for model_role, telemetry in available_telemetry:
+            hit_rate = (
+                telemetry.cumulative_hit_count / telemetry.cumulative_lookup_count
+                if telemetry.cumulative_lookup_count
+                else 0.0
+            )
+            logger.info(
+                "{} prefix-cache telemetry for backend {}:\n"
+                "\tToken capacity: {}\n"
+                "\tCurrent indexed tokens: {}\n"
+                "\tCumulative indexed tokens: {}\n"
+                "\tCumulative evicted tokens: {}\n"
+                "\tCumulative restored tokens: {}\n"
+                "\tCumulative lookups: {}\n"
+                "\tCumulative hits: {}\n"
+                "\tCumulative hit rate: {:.1%}",
+                model_role,
+                backend.backend_id,
+                telemetry.token_capacity,
+                telemetry.current_indexed_token_count,
+                telemetry.cumulative_indexed_token_count,
+                telemetry.cumulative_evicted_token_count,
+                telemetry.cumulative_restored_token_count,
+                telemetry.cumulative_lookup_count,
+                telemetry.cumulative_hit_count,
+                hit_rate,
+            )
+
 
 def _format_optional_metric(value: int | None) -> int | str:
     return "unavailable" if value is None else value
