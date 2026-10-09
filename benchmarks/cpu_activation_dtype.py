@@ -185,7 +185,7 @@ class CpuActivationDtypeBenchmark(Benchmark):
         f32_decode_rate = self._decode_tokens_per_second(
             f32.long_request_metrics.output_token_count,
             f32_ttft,
-            f32_e2e,
+            self._required_time_to_last_token(f32.long_request_metrics),
         )
 
         rows = []
@@ -197,7 +197,7 @@ class CpuActivationDtypeBenchmark(Benchmark):
             decode_rate = self._decode_tokens_per_second(
                 metrics.output_token_count,
                 ttft,
-                e2e,
+                self._required_time_to_last_token(metrics),
             )
             rows.append(
                 (
@@ -309,6 +309,13 @@ class CpuActivationDtypeBenchmark(Benchmark):
         if output_token_count <= 1 or decode_duration_microseconds <= 0:
             raise RuntimeError("generation result has no measurable decode duration")
         return (output_token_count - 1) * 1_000_000 / decode_duration_microseconds
+
+    @staticmethod
+    def _required_time_to_last_token(metrics: GenerationMetrics) -> int:
+        value = metrics.time_to_last_token_microseconds
+        if value is None or value <= 0:
+            raise RuntimeError("generation result has no time-to-last-token metric")
+        return value
 
     @staticmethod
     def _format_kib_as_mib(value: int) -> str:

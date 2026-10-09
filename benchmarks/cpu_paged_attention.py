@@ -306,7 +306,8 @@ class CpuPagedAttentionBenchmark(Benchmark):
             _, baseline_e2e = cls._required_latencies(baseline_metrics)
             baseline_decode_rate = cls._decode_tokens_per_second(
                 baseline_metrics.output_token_count,
-                *cls._required_latencies(baseline_metrics),
+                cls._required_latencies(baseline_metrics)[0],
+                cls._required_time_to_last_token(baseline_metrics),
             )
             for mode in (
                 (False, False, False),
@@ -327,7 +328,7 @@ class CpuPagedAttentionBenchmark(Benchmark):
                 decode_rate = cls._decode_tokens_per_second(
                     metrics.output_token_count,
                     ttft,
-                    e2e,
+                    cls._required_time_to_last_token(metrics),
                 )
                 if not paged_attention_enabled:
                     value_matmul_name = "Full V"
@@ -495,6 +496,13 @@ class CpuPagedAttentionBenchmark(Benchmark):
         if decode_duration_microseconds <= 0:
             raise RuntimeError("generation result has no measurable decode duration")
         return (output_token_count - 1) * 1_000_000 / decode_duration_microseconds
+
+    @staticmethod
+    def _required_time_to_last_token(metrics: GenerationMetrics) -> int:
+        value = metrics.time_to_last_token_microseconds
+        if value is None or value <= 0:
+            raise RuntimeError("generation result has no time-to-last-token metric")
+        return value
 
     @staticmethod
     def _format_speedup(baseline_duration: int, duration: int) -> str:

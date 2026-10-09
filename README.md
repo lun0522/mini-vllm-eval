@@ -24,17 +24,23 @@ deactivate
 
 ## Run
 
+### `simple_generation`
+
 Generate one response and print its streamed output:
 
 ```shell
 python3 main.py --benchmark simple_generation
 ```
 
+### `prefix_caching`
+
 Run the prefix-caching benchmark:
 
 ```shell
 python3 main.py --benchmark prefix_caching
 ```
+
+### `continuous_batching`
 
 Compare serial admission with continuous batching using two-request and
 heterogeneous four-request workloads:
@@ -46,6 +52,8 @@ python3 main.py --benchmark continuous_batching
 For repeated measurement and interpretation, use the
 `continuous-batching-benchmark` skill.
 
+### `scheduling_policies`
+
 Compare first-come-first-served, shortest-prefill-first, and round-robin
 scheduling with a decoding anchor and three mixed-length follower prefills:
 
@@ -55,6 +63,8 @@ python3 main.py --benchmark scheduling_policies
 
 For repeated measurement and interpretation, use the
 `scheduling-policy-benchmark` skill.
+
+### `speculative_decoding_qwen` and `speculative_decoding_llama`
 
 Compare target-only decoding with fixed-4, acceptance-rate adaptive, and
 accepted-length adaptive speculative decoding on two similarly sized workloads.
@@ -71,6 +81,8 @@ python3 main.py --benchmark speculative_decoding_llama
 
 For repeated measurement and interpretation, use the
 `speculative-decoding-benchmark` skill.
+
+### `cpu_activation_dtype`
 
 Compare three CPU activation configurations: F32, unoptimized F16, and F16
 using quantized matmul via F32. Each case uses a short one-token warm-up, a
@@ -103,12 +115,20 @@ python3 .agents/skills/activation-dtype-benchmark/scripts/activation_traces.py \
   /tmp/mini-vllm-activation-traces/f16-qmatmul/model-runner-TIMESTAMP.json
 ```
 
+### `cpu_paged_attention_f32`
+
 Compare contiguous and paged CPU attention with repeated-KV/grouped-Q and
 concatenated/page-wise value matmul:
 
 ```shell
 python3 main.py --benchmark cpu_paged_attention_f32
-# Or test the same attention configurations with F16 activations:
+```
+
+### `cpu_paged_attention_f16`
+
+Test the same attention configurations with F16 activations:
+
+```shell
 python3 main.py --benchmark cpu_paged_attention_f16
 ```
 

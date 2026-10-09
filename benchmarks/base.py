@@ -53,6 +53,12 @@ class BenchmarkCase:
 
 
 @dataclass(frozen=True)
+class PrefixCacheMetrics:
+    restored_token_count: int
+    newly_indexed_token_count: int
+
+
+@dataclass(frozen=True)
 class DraftTokenMetrics:
     accepted_token_count: int
     proposed_token_count: int
@@ -69,8 +75,13 @@ class DraftTokenMetrics:
 class GenerationMetrics:
     input_token_count: int
     output_token_count: int
+    target_prefix_cache_metrics: PrefixCacheMetrics
+    draft_prefix_cache_metrics: PrefixCacheMetrics | None
+    prefill_duration_microseconds: int
+    decode_duration_microseconds: int
     time_to_first_token_microseconds: int | None
-    end_to_end_latency_microseconds: int | None
+    time_to_last_token_microseconds: int | None
+    end_to_end_latency_microseconds: int
     draft_token_metrics: DraftTokenMetrics | None
 
 
@@ -147,20 +158,47 @@ class Benchmark(ABC):
                     for bucket in draft_stats.selected_token_count_histogram
                 ),
             )
-        time_to_first_token_microseconds = None
-        end_to_end_latency_microseconds = None
-        if stats.HasField("token_generation_latency"):
-            time_to_first_token_microseconds = (
-                stats.token_generation_latency.time_to_first_token_microseconds
+        if not stats.HasField("target_prefix_cache_stats"):
+            raise ValueError("generation statistics omitted target prefix-cache metrics")
+        target_prefix_cache_metrics = PrefixCacheMetrics(
+            restored_token_count=(
+                stats.target_prefix_cache_stats.restored_token_count
+            ),
+            newly_indexed_token_count=(
+                stats.target_prefix_cache_stats.newly_indexed_token_count
+            ),
+        )
+        draft_prefix_cache_metrics = None
+        if stats.HasField("draft_prefix_cache_stats"):
+            draft_prefix_cache_metrics = PrefixCacheMetrics(
+                restored_token_count=(
+                    stats.draft_prefix_cache_stats.restored_token_count
+                ),
+                newly_indexed_token_count=(
+                    stats.draft_prefix_cache_stats.newly_indexed_token_count
+                ),
             )
-            end_to_end_latency_microseconds = (
-                stats.token_generation_latency.end_to_end_latency_microseconds
-            )
+        if not stats.HasField("timing"):
+            raise ValueError("generation statistics omitted timing metrics")
+        timing = stats.timing
+        time_to_first_token_microseconds = (
+            timing.time_to_first_token_microseconds or None
+        )
+        time_to_last_token_microseconds = (
+            timing.time_to_last_token_microseconds or None
+        )
         return GenerationMetrics(
             input_token_count=stats.input_token_count,
             output_token_count=stats.output_token_count,
+            target_prefix_cache_metrics=target_prefix_cache_metrics,
+            draft_prefix_cache_metrics=draft_prefix_cache_metrics,
+            prefill_duration_microseconds=timing.prefill_duration_microseconds,
+            decode_duration_microseconds=timing.decode_duration_microseconds,
             time_to_first_token_microseconds=time_to_first_token_microseconds,
-            end_to_end_latency_microseconds=end_to_end_latency_microseconds,
+            time_to_last_token_microseconds=time_to_last_token_microseconds,
+            end_to_end_latency_microseconds=(
+                timing.request_completion_latency_microseconds
+            ),
             draft_token_metrics=draft_token_metrics,
         )
 
@@ -170,6 +208,15 @@ class Benchmark(ABC):
         draft_acceptance_rate = "unavailable"
         draft_token_totals = "unavailable"
         draft_token_histogram = "unavailable"
+        draft_cached_token_count: int | str = "unavailable"
+        draft_newly_indexed_token_count: int | str = "unavailable"
+        if metrics.draft_prefix_cache_metrics is not None:
+            draft_cached_token_count = (
+                metrics.draft_prefix_cache_metrics.restored_token_count
+            )
+            draft_newly_indexed_token_count = (
+                metrics.draft_prefix_cache_metrics.newly_indexed_token_count
+            )
         if metrics.draft_token_metrics is not None:
             draft_metrics = metrics.draft_token_metrics
             draft_acceptance_rate = f"{draft_metrics.acceptance_rate * 100:.1f}%"
@@ -187,15 +234,29 @@ class Benchmark(ABC):
             "Generation stats:\n"
             "\tInput tokens: {}\n"
             "\tOutput tokens: {}\n"
+            "\tTarget cached tokens: {}\n"
+            "\tDraft cached tokens: {}\n"
+            "\tTarget newly indexed tokens: {}\n"
+            "\tDraft newly indexed tokens: {}\n"
+            "\tPrefill duration: {} us\n"
+            "\tDecode duration: {} us\n"
             "\tTime to first token: {} us\n"
+            "\tTime to last token: {} us\n"
             "\tEnd-to-end latency: {} us\n"
             "\tDraft acceptance: {}\n"
             "\tDraft accepted/proposed: {}\n"
             "\tDraft selected count:uses: {}",
             metrics.input_token_count,
             metrics.output_token_count,
+            metrics.target_prefix_cache_metrics.restored_token_count,
+            draft_cached_token_count,
+            metrics.target_prefix_cache_metrics.newly_indexed_token_count,
+            draft_newly_indexed_token_count,
+            metrics.prefill_duration_microseconds,
+            metrics.decode_duration_microseconds,
             _format_optional_metric(metrics.time_to_first_token_microseconds),
-            _format_optional_metric(metrics.end_to_end_latency_microseconds),
+            _format_optional_metric(metrics.time_to_last_token_microseconds),
+            metrics.end_to_end_latency_microseconds,
             draft_acceptance_rate,
             draft_token_totals,
             draft_token_histogram,
