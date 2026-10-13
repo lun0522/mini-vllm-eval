@@ -45,6 +45,19 @@ For report-quality repeated runs and deterministic result analysis, follow the
 [`prefix-cache-reuse-benchmark`](.agents/skills/prefix-cache-reuse-benchmark/SKILL.md)
 skill.
 
+### `prefix_cache_concurrent_population`
+
+Compare completion and incremental prefix publication with independent and
+exact-input single-flight coordination using cold bursts and in-flight fan-out:
+
+```shell
+python3 main.py --benchmark prefix_cache_concurrent_population
+```
+
+For repeated measurement and deterministic analysis, follow the
+[`prefix-cache-concurrent-population-benchmark`](.agents/skills/prefix-cache-concurrent-population-benchmark/SKILL.md)
+skill.
+
 ### `continuous_batching`
 
 Compare serial admission with continuous batching using two-request and
