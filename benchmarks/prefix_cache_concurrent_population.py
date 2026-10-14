@@ -22,8 +22,25 @@ from proto_loader import ProtoModules
 
 COMPLETION_INDEPENDENT = "Completion publication / independent requests"
 INCREMENTAL_INDEPENDENT = "Incremental publication / independent requests"
-COMPLETION_SINGLE_FLIGHT = "Completion publication / exact-input single flight"
-INCREMENTAL_SINGLE_FLIGHT = "Incremental publication / exact-input single flight"
+COMPLETION_UNTIL_REQUEST_COMPLETION = (
+    "Completion publication / single flight until request completion"
+)
+INCREMENTAL_UNTIL_REQUEST_COMPLETION = (
+    "Incremental publication / single flight until request completion"
+)
+COMPLETION_UNTIL_PREFIX_PUBLISHED = (
+    "Completion publication / single flight until prefix publication"
+)
+INCREMENTAL_UNTIL_PREFIX_PUBLISHED = (
+    "Incremental publication / single flight until prefix publication"
+)
+INDEPENDENT = "PREFIX_CACHE_COORDINATION_POLICY_INDEPENDENT"
+SINGLE_FLIGHT_UNTIL_REQUEST_COMPLETION = (
+    "PREFIX_CACHE_COORDINATION_POLICY_EXACT_INPUT_SINGLE_FLIGHT_UNTIL_REQUEST_COMPLETION"
+)
+SINGLE_FLIGHT_UNTIL_PREFIX_PUBLISHED = (
+    "PREFIX_CACHE_COORDINATION_POLICY_EXACT_INPUT_SINGLE_FLIGHT_UNTIL_PREFIX_PUBLISHED"
+)
 PAGE_TOKEN_COUNT = 16
 TARGET_KV_CACHE_SIZE_BYTES = 128 * 1024 * 1024
 MAX_ACTIVE_REQUEST_COUNT = 8
@@ -57,39 +74,75 @@ def _question(namespace: str) -> str:
 
 class PrefixCacheConcurrentPopulationBenchmark(Benchmark):
     def server_flags(self) -> list[str]:
-        return self._server_flags(incremental=True, single_flight=True)
+        return self._server_flags(
+            incremental=True,
+            coordination_policy=SINGLE_FLIGHT_UNTIL_PREFIX_PUBLISHED,
+        )
 
     def cases(self) -> tuple[BenchmarkCase, ...]:
         return (
             BenchmarkCase(
                 COMPLETION_INDEPENDENT,
-                tuple(self._server_flags(incremental=False, single_flight=False)),
+                tuple(
+                    self._server_flags(
+                        incremental=False,
+                        coordination_policy=INDEPENDENT,
+                    )
+                ),
+            ),
+            BenchmarkCase(
+                COMPLETION_UNTIL_REQUEST_COMPLETION,
+                tuple(
+                    self._server_flags(
+                        incremental=False,
+                        coordination_policy=SINGLE_FLIGHT_UNTIL_REQUEST_COMPLETION,
+                    )
+                ),
+            ),
+            BenchmarkCase(
+                COMPLETION_UNTIL_PREFIX_PUBLISHED,
+                tuple(
+                    self._server_flags(
+                        incremental=False,
+                        coordination_policy=SINGLE_FLIGHT_UNTIL_PREFIX_PUBLISHED,
+                    )
+                ),
             ),
             BenchmarkCase(
                 INCREMENTAL_INDEPENDENT,
-                tuple(self._server_flags(incremental=True, single_flight=False)),
+                tuple(
+                    self._server_flags(
+                        incremental=True,
+                        coordination_policy=INDEPENDENT,
+                    )
+                ),
             ),
             BenchmarkCase(
-                COMPLETION_SINGLE_FLIGHT,
-                tuple(self._server_flags(incremental=False, single_flight=True)),
+                INCREMENTAL_UNTIL_REQUEST_COMPLETION,
+                tuple(
+                    self._server_flags(
+                        incremental=True,
+                        coordination_policy=SINGLE_FLIGHT_UNTIL_REQUEST_COMPLETION,
+                    )
+                ),
             ),
             BenchmarkCase(
-                INCREMENTAL_SINGLE_FLIGHT,
-                tuple(self._server_flags(incremental=True, single_flight=True)),
+                INCREMENTAL_UNTIL_PREFIX_PUBLISHED,
+                tuple(
+                    self._server_flags(
+                        incremental=True,
+                        coordination_policy=SINGLE_FLIGHT_UNTIL_PREFIX_PUBLISHED,
+                    )
+                ),
             ),
         )
 
     @staticmethod
-    def _server_flags(incremental: bool, single_flight: bool) -> list[str]:
+    def _server_flags(incremental: bool, coordination_policy: str) -> list[str]:
         publication_policy = (
             "PREFIX_CACHE_PUBLICATION_POLICY_INCREMENTAL"
             if incremental
             else "PREFIX_CACHE_PUBLICATION_POLICY_ON_REQUEST_COMPLETION"
-        )
-        coordination_policy = (
-            "PREFIX_CACHE_COORDINATION_POLICY_EXACT_INPUT_SINGLE_FLIGHT"
-            if single_flight
-            else "PREFIX_CACHE_COORDINATION_POLICY_INDEPENDENT"
         )
         return [
             "--model",
@@ -343,8 +396,16 @@ class PrefixCacheConcurrentPopulationBenchmark(Benchmark):
         case_name = {
             COMPLETION_INDEPENDENT: "completion_independent",
             INCREMENTAL_INDEPENDENT: "incremental_independent",
-            COMPLETION_SINGLE_FLIGHT: "completion_single_flight",
-            INCREMENTAL_SINGLE_FLIGHT: "incremental_single_flight",
+            COMPLETION_UNTIL_REQUEST_COMPLETION: (
+                "completion_until_request_completion"
+            ),
+            INCREMENTAL_UNTIL_REQUEST_COMPLETION: (
+                "incremental_until_request_completion"
+            ),
+            COMPLETION_UNTIL_PREFIX_PUBLISHED: "completion_until_prefix_published",
+            INCREMENTAL_UNTIL_PREFIX_PUBLISHED: (
+                "incremental_until_prefix_published"
+            ),
         }[case.name]
         metrics = result.metrics
         logger.info(

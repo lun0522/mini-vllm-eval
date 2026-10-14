@@ -3,12 +3,13 @@ name: prefix-cache-concurrent-population-benchmark
 description: Run and interpret repeated mini-vllm concurrent prefix-cache population benchmarks. Use for report-quality measurements or changes to the prefix_cache_concurrent_population benchmark; do not use for general prefix reuse or cache-aware admission benchmarks.
 ---
 
-# Prefix Cache Single-Flight Benchmark
+# Prefix Cache Concurrent-Population Benchmark
 
 Run from the `mini-vllm-eval` repository root. The benchmark crosses completion
-and incremental prefix publication with independent and exact-input
-single-flight coordination. Do not change its model, cache geometry, prompts,
-concurrency, or output lengths within a measurement series.
+and incremental prefix publication with independent execution and exact-input
+single-flight released at either request completion or prefix publication. Do
+not change its model, cache geometry, prompts, concurrency, or output lengths
+within a measurement series.
 
 ## Workload Invariants
 
@@ -17,11 +18,17 @@ concurrency, or output lengths within a measurement series.
 - Cold simultaneous bursts at concurrency 2/4/8 expose how duplicate prefill
   scales.
 - Output lengths 16 and 128 expose the cost of making followers wait for the
-  leader to finish decoding before they can reuse its cache.
+  leader to finish decoding, and whether prefix-publication release avoids it.
+- Prefix-publication release forces the leader's completed prefix to be
+  published even with the on-request-completion publication policy. In that
+  pairing, the publication-policy comparison only measures additional
+  incremental checkpoints after the release checkpoint.
 - In-flight fan-out starts one 128-token leader and submits the remaining
   identical requests after its first streamed text. This is the publication
   timing workload: incremental publication can serve those followers while
-  completion publication cannot.
+  completion publication cannot. Under prefix-publication release, these are
+  warm follow-on requests rather than followers of the original flight; use the
+  simultaneous cold bursts to compare the two follower-release points.
 - The distinct-input burst is a control: single-flight should not block requests
   whose inputs differ.
 - Keep all clients connected until completion. Waiting-follower cancellation is
@@ -39,9 +46,10 @@ First run one smoke test:
 .venv/bin/python3 main.py --benchmark prefix_cache_concurrent_population
 ```
 
-Confirm that exact-input followers restore tokens with single-flight,
-incremental publication increases restoration for independent in-flight
-fan-out, and all distinct-input controls complete.
+Confirm that exact-input followers restore tokens with both single-flight
+release policies, prefix-publication release starts followers before the
+leader completes, incremental publication increases restoration for
+independent in-flight fan-out, and all distinct-input controls complete.
 
 Then collect three sequential complete logs:
 
@@ -69,13 +77,18 @@ inherently sensitive to which concurrent request publishes first.
 ## Interpretation
 
 - Use restored tokens and summed prefill time to show avoided duplicate prefill.
-- Compare incremental against completion publication while holding coordination
-  constant, especially for in-flight fan-out.
-- Compare single-flight against independent execution while holding publication
-  constant, especially for simultaneous cold bursts.
+- Compare configured incremental against completion publication while holding
+  coordination constant, especially for in-flight fan-out. Account for the
+  required release checkpoint under prefix-publication coordination.
+- Compare both single-flight release points against independent execution while
+  holding publication constant, especially for simultaneous cold bursts.
+- Compare prefix-publication release against request-completion release while
+  holding publication constant. The former should retain duplicate-prefill
+  avoidance without making followers wait through the leader's decode.
 - Use mean TTFT, maximum E2E, and burst wall time to capture the follower wait.
-- Compare short and long output variants explicitly: completion-gated followers
-  wait through the leader's decode, so long output may offset prefill savings.
+- Compare short and long output variants explicitly: request-completion-gated
+  followers wait through the leader's decode, so long output may offset prefill
+  savings; prefix-publication-gated followers should not pay that delay.
 - The distinct-input control should remain close between policies; large changes
   indicate noise or an unintended scheduling interaction.
 - Do not claim this benchmark covers partial-prefix coordination, warm-cache

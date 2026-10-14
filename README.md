@@ -47,8 +47,9 @@ skill.
 
 ### `prefix_cache_concurrent_population`
 
-Compare completion and incremental prefix publication with independent and
-exact-input single-flight coordination using cold bursts and in-flight fan-out:
+Compare completion and incremental prefix publication with independent
+execution and exact-input single-flight released at request completion or
+prefix publication, using cold bursts and in-flight fan-out:
 
 ```shell
 python3 main.py --benchmark prefix_cache_concurrent_population

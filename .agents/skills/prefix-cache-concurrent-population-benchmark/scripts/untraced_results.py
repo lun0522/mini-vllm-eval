@@ -13,7 +13,11 @@ from tabulate import tabulate
 
 
 PUBLICATION_POLICIES = ("completion", "incremental")
-COORDINATION_POLICIES = ("independent", "single_flight")
+COORDINATION_POLICIES = (
+    "independent",
+    "until_request_completion",
+    "until_prefix_published",
+)
 CASES = tuple(
     f"{publication}_{coordination}"
     for publication in PUBLICATION_POLICIES
@@ -154,20 +158,24 @@ def _validate(runs: list[dict[tuple[str, str, int, int], Measurements]]) -> None
                             output_tokens,
                         )
                     ]
-                    coordinated = run[
-                        (
-                            f"{publication}_single_flight",
-                            workload,
-                            concurrency,
-                            output_tokens,
-                        )
-                    ]
-                    if coordinated.restored_token_count < independent.restored_token_count:
-                        raise SystemExit(
-                            f"run {run_index} {publication} single-flight restored fewer "
-                            f"tokens than independent execution for "
-                            f"c{concurrency}/o{output_tokens}"
-                        )
+                    for coordination in COORDINATION_POLICIES[1:]:
+                        coordinated = run[
+                            (
+                                f"{publication}_{coordination}",
+                                workload,
+                                concurrency,
+                                output_tokens,
+                            )
+                        ]
+                        if (
+                            coordinated.restored_token_count
+                            < independent.restored_token_count
+                        ):
+                            raise SystemExit(
+                                f"run {run_index} {publication}/{coordination} "
+                                "restored fewer tokens than independent execution for "
+                                f"c{concurrency}/o{output_tokens}"
+                            )
         for concurrency in (2, 4, 8):
             completion = run[("completion_independent", "inflight", concurrency, 128)]
             incremental = run[("incremental_independent", "inflight", concurrency, 128)]
@@ -228,16 +236,29 @@ def _print_comparisons(
         "Single-flight reduction versus independent requests",
         tuple(
             (
-                publication,
+                f"{publication}/{coordination}",
                 f"{publication}_independent",
-                f"{publication}_single_flight",
+                f"{publication}_{coordination}",
+            )
+            for publication in PUBLICATION_POLICIES
+            for coordination in COORDINATION_POLICIES[1:]
+        ),
+    )
+    _print_policy_comparison(
+        runs,
+        "Prefix-publication release versus request-completion release",
+        tuple(
+            (
+                publication,
+                f"{publication}_until_request_completion",
+                f"{publication}_until_prefix_published",
             )
             for publication in PUBLICATION_POLICIES
         ),
     )
     _print_policy_comparison(
         runs,
-        "Incremental-publication reduction versus completion publication",
+        "Configured incremental-publication reduction versus completion publication",
         tuple(
             (
                 coordination,
