@@ -32,6 +32,22 @@ Generate one response and print its streamed output:
 python3 main.py --benchmark simple_generation
 ```
 
+### `backend_throughput_profiles`
+
+Measure isolated CPU and GPU execution throughput across the twelve
+combinations of 128, 512, and 2048 input tokens with 16, 128, 512, and 1024
+maximum output tokens using Qwen2.5 0.5B. Each combination has three measured
+runs per backend. The benchmark reports prefill and decode timings and derives
+request-orchestrator throughput profiles:
+
+```shell
+python3 main.py --benchmark backend_throughput_profiles
+```
+
+For repeated measurements and deterministic aggregation, follow the
+[`backend-throughput-profile-benchmark`](.agents/skills/backend-throughput-profile-benchmark/SKILL.md)
+skill.
+
 ### `prefix_cache_reuse`
 
 Measure prefix-cache overlap, warm fan-out, cold-versus-warm bursts, and
