@@ -73,6 +73,7 @@ class DraftTokenMetrics:
 
 @dataclass(frozen=True)
 class GenerationMetrics:
+    backend_id: int
     input_token_count: int
     output_token_count: int
     target_prefix_cache_metrics: PrefixCacheMetrics
@@ -188,6 +189,7 @@ class Benchmark(ABC):
             timing.time_to_last_token_microseconds or None
         )
         return GenerationMetrics(
+            backend_id=stats.backend_id,
             input_token_count=stats.input_token_count,
             output_token_count=stats.output_token_count,
             target_prefix_cache_metrics=target_prefix_cache_metrics,
@@ -232,6 +234,7 @@ class Benchmark(ABC):
             )
         logger.info(
             "Generation stats:\n"
+            "\tBackend ID: {}\n"
             "\tInput tokens: {}\n"
             "\tOutput tokens: {}\n"
             "\tTarget cached tokens: {}\n"
@@ -246,6 +249,7 @@ class Benchmark(ABC):
             "\tDraft acceptance: {}\n"
             "\tDraft accepted/proposed: {}\n"
             "\tDraft selected count:uses: {}",
+            metrics.backend_id,
             metrics.input_token_count,
             metrics.output_token_count,
             metrics.target_prefix_cache_metrics.restored_token_count,

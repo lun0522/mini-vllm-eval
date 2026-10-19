@@ -99,6 +99,25 @@ python3 main.py --benchmark scheduling_policies
 For repeated measurement and interpretation, use the
 `scheduling-policy-benchmark` skill.
 
+### `request_orchestration`
+
+Compare all five mixed CPU/GPU request-routing policies with a concurrent,
+heterogeneous workload containing unique and reusable-prefix requests. The
+same suite also compares the single fallback throughput profile with the full
+measured profile matrix for both estimated-work policies:
+
+```shell
+python3 main.py --benchmark request_orchestration
+```
+
+The benchmark runs seven server configurations. Results include wall time,
+output throughput, latency percentiles, prefix-cache restoration, and
+per-backend request and token distributions.
+
+For repeated measurements and deterministic aggregation, follow the
+[`request-orchestration-benchmark`](.agents/skills/request-orchestration-benchmark/SKILL.md)
+skill.
+
 ### `speculative_decoding_qwen` and `speculative_decoding_llama`
 
 Compare target-only decoding with fixed-4, acceptance-rate adaptive, and
