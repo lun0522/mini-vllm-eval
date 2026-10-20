@@ -6,8 +6,10 @@ import math
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from dataclasses import replace
 from statistics import median
 from time import perf_counter
+from time import sleep
 from typing import Any
 
 from loguru import logger
@@ -23,6 +25,7 @@ from proto_loader import ProtoModules
 TARGET_KV_CACHE_SIZE_BYTES = 256 * 1024 * 1024
 MAX_BATCHED_TOKEN_COUNT = 2048
 MAX_ACTIVE_REQUEST_COUNT = 4
+REQUEST_INTERVAL_SECONDS = 0.050
 PROFILE_FILE = "benchmarks/backend_throughput_profiles.textproto"
 
 
@@ -33,13 +36,12 @@ class WorkloadShape:
     max_output_token_count: int
 
 
-WORKLOAD_SHAPES = (
-    WorkloadShape("short", 128, 16),
-    WorkloadShape("decode-heavy", 128, 512),
-    WorkloadShape("medium", 512, 128),
-    WorkloadShape("prefill-heavy", 2048, 16),
-    WorkloadShape("long", 2048, 1024),
-)
+SHORT = WorkloadShape("short", 128, 16)
+BACKLOG = WorkloadShape("backlog", 128, 512)
+MEDIUM = WorkloadShape("medium", 512, 64)
+PREFIX_PROBE = WorkloadShape("prefix", 1024, 16)
+SCENARIOS = ("load", "affinity")
+SCHEDULES = ("a", "b")
 
 
 @dataclass(frozen=True)
@@ -48,9 +50,20 @@ class CaseDefinition:
     policy: str
     profile_mode: str
     policy_comparison: bool
+    scenario: str = "load"
+    schedule: str = "a"
+
+    @property
+    def requests(self) -> tuple[RequestDefinition, ...]:
+        requests = REQUESTS_BY_SCENARIO[self.scenario]
+        # Swap adjacent positions, including the two initial backlog requests.
+        # Each request occupies the opposite round-robin parity in schedule B.
+        if self.schedule == "b":
+            return tuple(requests[index ^ 1] for index in range(len(requests)))
+        return requests
 
 
-CASES = (
+POLICY_CONFIGURATIONS = (
     CaseDefinition("policy_round_robin", "round-robin", "not-used", True),
     CaseDefinition("policy_least_requests", "least-requests", "not-used", True),
     CaseDefinition(
@@ -84,13 +97,19 @@ CASES = (
         False,
     ),
 )
-CASES_BY_NAME = {case.name: case for case in CASES}
-PROFILE_COMPARISON_CASES = (
-    CASES_BY_NAME["profile_least_estimated_work_fallback"],
-    CASES_BY_NAME["policy_least_estimated_work_detailed"],
-    CASES_BY_NAME["profile_cache_aware_least_estimated_work_fallback"],
-    CASES_BY_NAME["policy_cache_aware_least_estimated_work_detailed"],
+CASES = tuple(
+    replace(
+        config,
+        name=f"{config.name}__{scenario}__{schedule}",
+        scenario=scenario,
+        schedule=schedule,
+    )
+    for scenario in SCENARIOS
+    for schedule in SCHEDULES
+    for config in POLICY_CONFIGURATIONS
 )
+CASES_BY_NAME = {case.name: case for case in CASES}
+PROFILE_COMPARISON_CASES = tuple(case for case in CASES if "estimated-work" in case.policy)
 
 
 @dataclass(frozen=True)
@@ -105,6 +124,8 @@ class RequestDefinition:
 class RequestResult:
     definition: RequestDefinition
     metrics: GenerationMetrics
+    request_id: int
+    submission_offset_seconds: float
 
 
 @dataclass(frozen=True)
@@ -130,33 +151,52 @@ def _shared_prompt(shape: WorkloadShape) -> str:
     )
 
 
-def _unique_prompt(shape: WorkloadShape) -> str:
+def _unique_prompt(shape: WorkloadShape, label: str) -> str:
     word_count = max(1, shape.approximate_input_token_count - 48)
     words = " ".join("inference" for _ in range(word_count))
     return (
-        f"Unique {shape.name} routing study context. This request must not reuse another "
+        f"{label}: Unique routing study context. This request must not reuse another "
         f"workload's body: {words}\nSummarize this unique routing study."
     )
 
 
-REQUESTS = tuple(
-    request
-    for shape in WORKLOAD_SHAPES
-    for request in (
-        RequestDefinition(
-            label=f"{shape.name}-shared",
-            kind="shared",
-            shape=shape,
-            prompt=_shared_prompt(shape),
-        ),
-        RequestDefinition(
-            label=f"{shape.name}-unique",
-            kind="unique",
-            shape=shape,
-            prompt=_unique_prompt(shape),
-        ),
-    )
-)
+def _request(label: str, shape: WorkloadShape, kind: str = "unique") -> RequestDefinition:
+    prompt = _shared_prompt(shape) if kind == "shared" else _unique_prompt(shape, label)
+    return RequestDefinition(label, kind, shape, prompt)
+
+
+# Short contexts keep the decode budget affordable. Both schedules establish
+# work first, then offer cheap requests that can use otherwise idle CPU capacity.
+REQUESTS_BY_SCENARIO = {
+    "load": (
+        _request("amber-backlog", BACKLOG),
+        _request("birch-backlog", BACKLOG),
+        _request("cedar-short", SHORT),
+        _request("delta-medium", MEDIUM),
+        _request("elm-short", SHORT),
+        _request("fern-short", SHORT),
+        _request("grove-short", SHORT),
+        _request("hazel-medium", MEDIUM),
+        _request("iris-short", SHORT),
+        _request("juniper-short", SHORT),
+        _request("kelp-short", SHORT),
+        _request("larch-short", SHORT),
+    ),
+    "affinity": (
+        _request("amber-backlog", BACKLOG),
+        _request("birch-backlog", BACKLOG),
+        _request("cedar-short-shared", SHORT, "shared"),
+        _request("delta-prefix-unique", PREFIX_PROBE),
+        _request("elm-short-unique", SHORT),
+        _request("fern-prefix-shared", PREFIX_PROBE, "shared"),
+        _request("grove-short-unique", SHORT),
+        _request("hazel-short-shared", SHORT, "shared"),
+        _request("iris-prefix-shared", PREFIX_PROBE, "shared"),
+        _request("juniper-short-unique", SHORT),
+        _request("kelp-short-shared", SHORT, "shared"),
+        _request("larch-prefix-unique", PREFIX_PROBE),
+    ),
+}
 
 
 class RequestOrchestrationBenchmark(Benchmark):
@@ -180,6 +220,8 @@ class RequestOrchestrationBenchmark(Benchmark):
             "mixed",
             "--activation-dtype",
             "f32",
+            "--input-preprocessing-thread-count",
+            "1",
             "--kv-cache-config",
             (
                 "kv_cache_type: KV_CACHE_TYPE_PAGED_PREFIX "
@@ -205,19 +247,36 @@ class RequestOrchestrationBenchmark(Benchmark):
         case: BenchmarkCase,
         _process: subprocess.Popen[bytes],
     ) -> OrchestrationResult:
-        self._seed_shared_prefix(client, proto, case.name)
+        definition = CASES_BY_NAME[case.name]
+        requests_to_send = definition.requests
+        if definition.scenario == "affinity":
+            self._seed_shared_prefix(client, proto, case.name)
+        logger.info(
+            "REQUEST_ORCHESTRATION_REPLAY case={} version=2 interval_ms=50 "
+            "preprocessing_threads=1 order={}",
+            case.name,
+            ",".join(request.label for request in requests_to_send),
+        )
         started_at = perf_counter()
-        with ThreadPoolExecutor(max_workers=len(REQUESTS)) as executor:
-            futures = tuple(
-                executor.submit(
-                    self._send_request,
-                    client,
-                    proto,
-                    case.name,
-                    definition,
+        with ThreadPoolExecutor(max_workers=len(requests_to_send)) as executor:
+            futures = []
+            for position, definition in enumerate(requests_to_send):
+                # Fixed start times keep response handling concurrent without racing
+                # client threads to submit requests. Do not wait for generation.
+                delay = started_at + position * REQUEST_INTERVAL_SECONDS - perf_counter()
+                if delay > 0:
+                    sleep(delay)
+                submission_offset = perf_counter() - started_at
+                responses = self._send_request(client, proto, case.name, definition)
+                futures.append(
+                    executor.submit(
+                        self._collect_response,
+                        case.name,
+                        definition,
+                        responses,
+                        submission_offset,
+                    )
                 )
-                for definition in REQUESTS
-            )
             requests = tuple(future.result() for future in futures)
         wall_time_seconds = perf_counter() - started_at
         telemetry = client.GetPrefixCacheTelemetry(
@@ -233,12 +292,8 @@ class RequestOrchestrationBenchmark(Benchmark):
 
     @staticmethod
     def _seed_shared_prefix(client: Any, proto: ProtoModules, case_name: str) -> None:
-        longest_shape = max(
-            WORKLOAD_SHAPES,
-            key=lambda shape: shape.approximate_input_token_count,
-        )
         prompt = (
-            f"{_shared_prefix(longest_shape.approximate_input_token_count)}\n"
+            f"{_shared_prefix(PREFIX_PROBE.approximate_input_token_count)}\n"
             "Seed question: acknowledge the routing study."
         )
         logger.warning("Seeding the shared prefix for {}", case_name)
@@ -256,15 +311,23 @@ class RequestOrchestrationBenchmark(Benchmark):
                 stats = response.stats
         if stats is None:
             raise RuntimeError(f"{case_name} shared-prefix seed omitted statistics")
+        logger.info(
+            "REQUEST_ORCHESTRATION_SEED case={} request_id={} backend_id={} "
+            "input_tokens={} indexed_tokens={}",
+            case_name,
+            stats.request_id,
+            stats.backend_id,
+            stats.input_token_count,
+            stats.target_prefix_cache_stats.newly_indexed_token_count,
+        )
 
-    @classmethod
+    @staticmethod
     def _send_request(
-        cls,
         client: Any,
         proto: ProtoModules,
         case_name: str,
         definition: RequestDefinition,
-    ) -> RequestResult:
+    ) -> Any:
         logger.info("Sending {} request for {}", definition.label, case_name)
         request = proto.request_handler.GenerateText(
             prompt=definition.prompt,
@@ -274,8 +337,18 @@ class RequestOrchestrationBenchmark(Benchmark):
             stream_output=True,
             ignore_eos_tokens=True,
         )
+        return client.GenerateText(request)
+
+    @classmethod
+    def _collect_response(
+        cls,
+        case_name: str,
+        definition: RequestDefinition,
+        responses: Any,
+        submission_offset_seconds: float,
+    ) -> RequestResult:
         stats = None
-        for response in client.GenerateText(request):
+        for response in responses:
             if response.WhichOneof("event") == "stats":
                 stats = response.stats
         if stats is None:
@@ -286,7 +359,7 @@ class RequestOrchestrationBenchmark(Benchmark):
                 f"{case_name} {definition.label} produced {metrics.output_token_count} "
                 f"tokens instead of {definition.shape.max_output_token_count}"
             )
-        return RequestResult(definition, metrics)
+        return RequestResult(definition, metrics, stats.request_id, submission_offset_seconds)
 
     def report_results(
         self,
@@ -332,13 +405,14 @@ class RequestOrchestrationBenchmark(Benchmark):
                 raise RuntimeError(f"case {benchmark_case.name} returned mismatched results")
             if benchmark_case.name in results_by_case:
                 raise RuntimeError(f"received duplicate result for {benchmark_case.name}")
-            if result.wall_time_seconds <= 0 or len(result.requests) != len(REQUESTS):
+            definitions = CASES_BY_NAME[benchmark_case.name].requests
+            if result.wall_time_seconds <= 0 or len(result.requests) != len(definitions):
                 raise RuntimeError(f"case {benchmark_case.name} returned invalid results")
-            for definition, request in zip(REQUESTS, result.requests, strict=True):
+            for definition, request in zip(definitions, result.requests, strict=True):
                 cls._validate_request(benchmark_case.name, definition, request)
             results_by_case[benchmark_case.name] = result
         if set(results_by_case) != set(CASES_BY_NAME):
-            raise RuntimeError("request-orchestration benchmark requires all seven cases")
+            raise RuntimeError("request-orchestration benchmark requires all 28 cases")
         cls._validate_matching_input_token_counts(results_by_case)
         return results_by_case
 
@@ -373,18 +447,13 @@ class RequestOrchestrationBenchmark(Benchmark):
     def _validate_matching_input_token_counts(
         results_by_case: dict[str, OrchestrationResult],
     ) -> None:
-        first_case = CASES[0].name
-        expected = tuple(
-            request.metrics.input_token_count
-            for request in results_by_case[first_case].requests
-        )
-        for case in CASES[1:]:
-            observed = tuple(
-                request.metrics.input_token_count
-                for request in results_by_case[case.name].requests
-            )
-            if observed != expected:
-                raise RuntimeError(f"input token counts differ for {case.name}")
+        expected = {}
+        for case in CASES:
+            for request in results_by_case[case.name].requests:
+                key = (case.scenario, request.definition.label)
+                count = request.metrics.input_token_count
+                if expected.setdefault(key, count) != count:
+                    raise RuntimeError(f"input token counts differ for {case.name}/{key}")
 
     @classmethod
     def _summary_table(
@@ -398,7 +467,7 @@ class RequestOrchestrationBenchmark(Benchmark):
             metrics = cls._summary_metrics(result)
             rows.append(
                 (
-                    case.policy,
+                    case.name,
                     case.profile_mode,
                     cls._backend_distribution(result),
                     f"{result.wall_time_seconds:.3f}",
@@ -414,7 +483,7 @@ class RequestOrchestrationBenchmark(Benchmark):
         return tabulate(
             rows,
             headers=(
-                "Policy",
+                "Case",
                 "Profiles",
                 "Backend requests",
                 "Wall (s)",
@@ -499,7 +568,7 @@ class RequestOrchestrationBenchmark(Benchmark):
                 )
                 rows.append(
                     (
-                        case.policy,
+                        case.name,
                         case.profile_mode,
                         "CPU" if backend_id == 1 else "GPU",
                         len(requests),
@@ -514,7 +583,7 @@ class RequestOrchestrationBenchmark(Benchmark):
         return tabulate(
             rows,
             headers=(
-                "Policy",
+                "Case",
                 "Profiles",
                 "Device",
                 "Requests",
@@ -536,7 +605,7 @@ class RequestOrchestrationBenchmark(Benchmark):
                 metrics = request.metrics
                 rows.append(
                     (
-                        case.policy,
+                        case.name,
                         case.profile_mode,
                         request.definition.label,
                         metrics.input_token_count,
@@ -550,7 +619,7 @@ class RequestOrchestrationBenchmark(Benchmark):
         return tabulate(
             rows,
             headers=(
-                "Policy",
+                "Case",
                 "Profiles",
                 "Request",
                 "Input",
@@ -596,7 +665,7 @@ class RequestOrchestrationBenchmark(Benchmark):
                     "REQUEST_ORCHESTRATION_REQUEST "
                     "case={} policy={} profiles={} request={} kind={} input_tokens={} "
                     "output_tokens={} backend_id={} restored_tokens={} prefill_us={} "
-                    "decode_us={} ttft_us={} e2e_us={}",
+                    "decode_us={} ttft_us={} e2e_us={} request_id={} submitted_ms={:.3f}",
                     case.name,
                     case.policy,
                     case.profile_mode,
@@ -610,4 +679,6 @@ class RequestOrchestrationBenchmark(Benchmark):
                     request_metrics.decode_duration_microseconds,
                     cls._required_ttft(request_metrics),
                     request_metrics.end_to_end_latency_microseconds,
+                    request.request_id,
+                    request.submission_offset_seconds * 1_000,
                 )

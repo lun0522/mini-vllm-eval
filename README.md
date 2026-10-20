@@ -110,9 +110,17 @@ measured profile matrix for both estimated-work policies:
 python3 main.py --benchmark request_orchestration
 ```
 
-The benchmark runs seven server configurations. Results include wall time,
+The benchmark runs seven server configurations across load-balancing and
+cache-affinity scenarios, each with two fixed schedules: 28 fresh-server cases
+and 336 measured requests. Requests start 50 ms apart with one preprocessing
+worker; response consumption remains concurrent. The schedules use the same
+requests but swap round-robin parity. Short-context backlog requests create
+offloading opportunities without repeating the previous long-decode workload.
+Results include wall time,
 output throughput, latency percentiles, prefix-cache restoration, and
 per-backend request and token distributions.
+The analyzer validates the estimated-work policies' logged duration scores and
+reports their closest decision margins, helping explain changes in placement.
 
 For repeated measurements and deterministic aggregation, follow the
 [`request-orchestration-benchmark`](.agents/skills/request-orchestration-benchmark/SKILL.md)
