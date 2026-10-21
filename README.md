@@ -126,6 +126,28 @@ For repeated measurements and deterministic aggregation, follow the
 [`request-orchestration-benchmark`](.agents/skills/request-orchestration-benchmark/SKILL.md)
 skill.
 
+### `request_orchestration_capacity`
+
+Compare forcing every measured request to the GPU with mixed CPU/GPU routing
+under **cache-aware least estimated work**. Both cases run in mixed mode.
+Unmeasured benchmark-only requests first place the same approximately 512-token
+prefix in both backend caches. Three workloads then submit 4, 6, or 48 requests
+that reuse the prefix and generate 128 tokens each. They represent a GPU-only
+decision, the boundary immediately before CPU offloading begins, and sustained
+load where CPU capacity improves completion time:
+
+```shell
+python3 main.py --benchmark request_orchestration_capacity
+```
+
+The measured requests start 50 ms apart with one preprocessing worker. Both
+cases otherwise use the same Qwen2.5 0.5B model, F32 activations, scheduler,
+prefix-cache configuration, and measured throughput-profile matrix.
+
+For repeated measurements and deterministic aggregation, follow the
+[`request-orchestration-capacity-benchmark`](.agents/skills/request-orchestration-capacity-benchmark/SKILL.md)
+skill.
+
 ### `speculative_decoding_qwen` and `speculative_decoding_llama`
 
 Compare target-only decoding with fixed-4, acceptance-rate adaptive, and
