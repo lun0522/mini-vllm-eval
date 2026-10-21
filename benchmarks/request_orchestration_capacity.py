@@ -48,7 +48,7 @@ class CaseDefinition:
 
 WORKLOADS = (
     WorkloadDefinition("gpu_only", 4),
-    WorkloadDefinition("crossover_boundary", 6),
+    WorkloadDefinition("crossover_boundary", 7),
     WorkloadDefinition("saturated", 48),
 )
 ROUTING_MODES = (

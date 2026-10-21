@@ -131,10 +131,10 @@ skill.
 Compare forcing every measured request to the GPU with mixed CPU/GPU routing
 under **cache-aware least estimated work**. Both cases run in mixed mode.
 Unmeasured benchmark-only requests first place the same approximately 512-token
-prefix in both backend caches. Three workloads then submit 4, 6, or 48 requests
+prefix in both backend caches. Three workloads then submit 4, 7, or 48 requests
 that reuse the prefix and generate 128 tokens each. They represent a GPU-only
-decision, the boundary immediately before CPU offloading begins, and sustained
-load where CPU capacity improves completion time:
+decision, the first calibrated CPU-offload point, and sustained load where CPU
+capacity improves completion time:
 
 ```shell
 python3 main.py --benchmark request_orchestration_capacity

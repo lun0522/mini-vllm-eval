@@ -14,7 +14,7 @@ worker, scheduler, and throughput profiles fixed. Only measured request count
 changes:
 
 - `gpu_only`: four requests, which fit one GPU active batch.
-- `crossover_boundary`: six requests, the last calibrated point before the
+- `crossover_boundary`: seven requests, the first calibrated point where the
   policy begins offloading to CPU.
 - `saturated`: 48 requests, which give the CPU useful work while the GPU is
   backlogged.
@@ -61,9 +61,10 @@ runs are useful; do not automatically rerun or discard valid samples.
 - Use paired mixed-versus-forced-GPU changes in wall time and aggregate output
   throughput as the primary capacity result.
 - Confirm backend assignments before attributing improvement to CPU capacity.
-  The expected progression is no CPU work in the first two workloads and
-  multiple CPU requests under saturation, but investigate rather than discard
-  a valid run if a near-boundary decision changes.
+  The expected progression is no CPU work for `gpu_only`, one CPU request for
+  `crossover_boundary`, and multiple CPU requests under saturation, but
+  investigate rather than discard a valid run if a near-boundary decision
+  changes.
 - Treat `crossover_boundary` as a routing boundary, not proof that CPU and GPU
   have equal measured throughput. Inspect the analyzer's closest estimated
   decision margin.
