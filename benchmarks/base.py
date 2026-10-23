@@ -248,7 +248,7 @@ class Benchmark(ABC):
             "\tEnd-to-end latency: {} us\n"
             "\tDraft acceptance: {}\n"
             "\tDraft accepted/proposed: {}\n"
-            "\tDraft selected count:uses: {}",
+            "\tDraft selected-count histogram (count:uses): {}",
             metrics.backend_id,
             metrics.input_token_count,
             metrics.output_token_count,

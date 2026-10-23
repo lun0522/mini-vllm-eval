@@ -17,6 +17,9 @@ from benchmarks.request_orchestration_capacity import (
 from benchmarks.simple_generation import SimpleGenerationBenchmark
 from benchmarks.scheduling_policies import SchedulingPoliciesBenchmark
 from benchmarks.speculative_decoding import SpeculativeDecodingBenchmark
+from benchmarks.speculative_sampling_tradeoff import (
+    SpeculativeSamplingTradeoffBenchmark,
+)
 
 
 BENCHMARKS = {
@@ -33,4 +36,5 @@ BENCHMARKS = {
     "scheduling_policies": SchedulingPoliciesBenchmark(),
     "speculative_decoding_qwen": SpeculativeDecodingBenchmark("qwen"),
     "speculative_decoding_llama": SpeculativeDecodingBenchmark("llama"),
+    "speculative_sampling_tradeoff": SpeculativeSamplingTradeoffBenchmark(),
 }

@@ -166,6 +166,29 @@ python3 main.py --benchmark speculative_decoding_llama
 For repeated measurement and interpretation, use the
 `speculative-decoding-benchmark` skill.
 
+### `speculative_sampling_tradeoff`
+
+Measure how sampling temperature and mentored decoding's total-variation
+budget affect fixed-4 speculative decoding on a creative-writing workload. The
+benchmark uses Qwen2.5 7B with a Qwen2.5 0.5B draft model and generates 256
+tokens with each of three fixed random seeds. It first measures lossless
+speculation at temperatures 0.2, 0.7, 1.0, and 1.6, then holds temperature at
+0.7 while sweeping total-variation budgets 0, 0.1, 0.3, 0.5, 0.7, and 1.0.
+
+```shell
+python3 main.py --benchmark speculative_sampling_tradeoff
+```
+
+The benchmark runs 30 measured requests across two server configurations, plus
+one warm-up per configuration. It reports median and range of end-to-end
+latency, median decode throughput, speedup against target-only sampling,
+pooled draft acceptance, accepted and output tokens per verification round,
+and 500-character output excerpts for qualitative comparison.
+
+For repeated measurement and deterministic aggregation, follow the
+[`speculative-sampling-tradeoff-benchmark`](.agents/skills/speculative-sampling-tradeoff-benchmark/SKILL.md)
+skill.
+
 ### `cpu_activation_dtype`
 
 Compare three CPU activation configurations: F32, unoptimized F16, and F16
