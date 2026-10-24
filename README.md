@@ -24,6 +24,10 @@ deactivate
 
 ## Run
 
+The launcher builds `mini-vllm-rs` with no accelerator feature for CPU-only
+cases, with `metal` for GPU or mixed cases on macOS, and with `cuda` for those
+cases on Linux. The engine's committed lockfile is always used.
+
 ### `simple_generation`
 
 Generate one response and print its streamed output:

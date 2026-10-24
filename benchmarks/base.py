@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 from abc import ABC
 from abc import abstractmethod
 from dataclasses import dataclass
@@ -95,17 +96,41 @@ class Benchmark(ABC):
         case: BenchmarkCase,
         trace_directory: Path | None = None,
     ) -> list[str]:
+        inference_device = "gpu"
+        if "--inference-device" in case.server_flags:
+            option_index = case.server_flags.index("--inference-device")
+            try:
+                inference_device = case.server_flags[option_index + 1]
+            except IndexError as error:
+                raise ValueError("--inference-device requires a value") from error
+
         command = [
             "cargo",
             "run",
             "--release",
-            "--",
-            *case.server_flags,
-            "--control-socket",
-            str(CONTROL_SOCKET),
-            "--request-socket",
-            str(REQUEST_SOCKET),
+            "--locked",
+            "--no-default-features",
         ]
+        if inference_device != "cpu":
+            if sys.platform == "darwin":
+                backend_feature = "metal"
+            elif sys.platform.startswith("linux"):
+                backend_feature = "cuda"
+            else:
+                raise RuntimeError(
+                    f"GPU inference is unsupported on platform {sys.platform!r}"
+                )
+            command.extend(("--features", backend_feature))
+        command.extend(
+            (
+                "--",
+                *case.server_flags,
+                "--control-socket",
+                str(CONTROL_SOCKET),
+                "--request-socket",
+                str(REQUEST_SOCKET),
+            )
+        )
         if trace_directory is not None:
             command.extend(("--trace-directory", str(trace_directory)))
         return command
