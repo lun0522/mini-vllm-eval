@@ -10,7 +10,7 @@ from benchmarks.prefix_cache_reuse import PrefixCacheReuseBenchmark
 from benchmarks.prefix_cache_concurrent_population import (
     PrefixCacheConcurrentPopulationBenchmark,
 )
-from benchmarks.request_orchestration import RequestOrchestrationBenchmark
+from benchmarks.request_routing_policies import RequestRoutingPoliciesBenchmark
 from benchmarks.request_orchestration_capacity import (
     RequestOrchestrationCapacityBenchmark,
 )
@@ -30,7 +30,7 @@ BENCHMARKS = {
     "cpu_paged_attention_f16": CpuPagedAttentionBenchmark("f16"),
     "prefix_cache_reuse": PrefixCacheReuseBenchmark(),
     "prefix_cache_concurrent_population": PrefixCacheConcurrentPopulationBenchmark(),
-    "request_orchestration": RequestOrchestrationBenchmark(),
+    "request_routing_policies": RequestRoutingPoliciesBenchmark(),
     "request_orchestration_capacity": RequestOrchestrationCapacityBenchmark(),
     "simple_generation": SimpleGenerationBenchmark(),
     "scheduling_policies": SchedulingPoliciesBenchmark(),

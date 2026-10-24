@@ -14,7 +14,7 @@ worker, scheduler, and throughput profiles fixed. Only measured request count
 changes:
 
 - `gpu_only`: four requests, which fit one GPU active batch.
-- `crossover_boundary`: seven requests, the first calibrated point where the
+- `crossover_boundary`: eight requests, the first calibrated point where the
   policy begins offloading to CPU.
 - `saturated`: 48 requests, which give the CPU useful work while the GPU is
   backlogged.

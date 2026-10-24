@@ -129,7 +129,7 @@ class RequestResult:
 
 
 @dataclass(frozen=True)
-class OrchestrationResult:
+class RoutingPoliciesResult:
     case_name: str
     requests: tuple[RequestResult, ...]
     wall_time_seconds: float
@@ -199,7 +199,7 @@ REQUESTS_BY_SCENARIO = {
 }
 
 
-class RequestOrchestrationBenchmark(Benchmark):
+class RequestRoutingPoliciesBenchmark(Benchmark):
     def server_flags(self) -> list[str]:
         return self._server_flags(CASES[0])
 
@@ -246,13 +246,13 @@ class RequestOrchestrationBenchmark(Benchmark):
         proto: ProtoModules,
         case: BenchmarkCase,
         _process: subprocess.Popen[bytes],
-    ) -> OrchestrationResult:
+    ) -> RoutingPoliciesResult:
         definition = CASES_BY_NAME[case.name]
         requests_to_send = definition.requests
         if definition.scenario == "affinity":
             self._seed_shared_prefix(client, proto, case.name)
         logger.info(
-            "REQUEST_ORCHESTRATION_REPLAY case={} version=2 interval_ms=50 "
+            "REQUEST_ROUTING_POLICIES_REPLAY case={} version=2 interval_ms=50 "
             "preprocessing_threads=1 order={}",
             case.name,
             ",".join(request.label for request in requests_to_send),
@@ -284,7 +284,7 @@ class RequestOrchestrationBenchmark(Benchmark):
         )
         for backend in telemetry.backends:
             self.print_prefix_cache_telemetry(backend)
-        return OrchestrationResult(
+        return RoutingPoliciesResult(
             case_name=case.name,
             requests=requests,
             wall_time_seconds=wall_time_seconds,
@@ -312,7 +312,7 @@ class RequestOrchestrationBenchmark(Benchmark):
         if stats is None:
             raise RuntimeError(f"{case_name} shared-prefix seed omitted statistics")
         logger.info(
-            "REQUEST_ORCHESTRATION_SEED case={} request_id={} backend_id={} "
+            "REQUEST_ROUTING_POLICIES_SEED case={} request_id={} backend_id={} "
             "input_tokens={} indexed_tokens={}",
             case_name,
             stats.request_id,
@@ -367,25 +367,25 @@ class RequestOrchestrationBenchmark(Benchmark):
     ) -> None:
         results_by_case = self._validated_results(results)
         logger.info(
-            "Request-orchestration policy comparison:\n{}",
+            "Request-routing policy comparison:\n{}",
             self._summary_table(
                 tuple(case for case in CASES if case.policy_comparison),
                 results_by_case,
             ),
         )
         logger.info(
-            "Request-orchestration throughput-profile comparison:\n{}",
+            "Request-routing throughput-profile comparison:\n{}",
             self._summary_table(
                 PROFILE_COMPARISON_CASES,
                 results_by_case,
             ),
         )
         logger.info(
-            "Request-orchestration backend distribution:\n{}",
+            "Request-routing backend distribution:\n{}",
             self._backend_table(results_by_case),
         )
         logger.info(
-            "Request-orchestration request metrics:\n{}",
+            "Request-routing request metrics:\n{}",
             self._request_table(results_by_case),
         )
         self._report_machine_readable(results_by_case)
@@ -394,10 +394,10 @@ class RequestOrchestrationBenchmark(Benchmark):
     def _validated_results(
         cls,
         results: list[tuple[BenchmarkCase, Any]],
-    ) -> dict[str, OrchestrationResult]:
-        results_by_case: dict[str, OrchestrationResult] = {}
+    ) -> dict[str, RoutingPoliciesResult]:
+        results_by_case: dict[str, RoutingPoliciesResult] = {}
         for benchmark_case, result in results:
-            if not isinstance(result, OrchestrationResult):
+            if not isinstance(result, RoutingPoliciesResult):
                 raise RuntimeError(
                     f"case {benchmark_case.name} returned unexpected results"
                 )
@@ -412,7 +412,7 @@ class RequestOrchestrationBenchmark(Benchmark):
                 cls._validate_request(benchmark_case.name, definition, request)
             results_by_case[benchmark_case.name] = result
         if set(results_by_case) != set(CASES_BY_NAME):
-            raise RuntimeError("request-orchestration benchmark requires all 28 cases")
+            raise RuntimeError("request_routing_policies benchmark requires all 28 cases")
         cls._validate_matching_input_token_counts(results_by_case)
         return results_by_case
 
@@ -445,7 +445,7 @@ class RequestOrchestrationBenchmark(Benchmark):
 
     @staticmethod
     def _validate_matching_input_token_counts(
-        results_by_case: dict[str, OrchestrationResult],
+        results_by_case: dict[str, RoutingPoliciesResult],
     ) -> None:
         expected = {}
         for case in CASES:
@@ -459,7 +459,7 @@ class RequestOrchestrationBenchmark(Benchmark):
     def _summary_table(
         cls,
         cases: tuple[CaseDefinition, ...],
-        results_by_case: dict[str, OrchestrationResult],
+        results_by_case: dict[str, RoutingPoliciesResult],
     ) -> str:
         rows = []
         for case in cases:
@@ -499,7 +499,7 @@ class RequestOrchestrationBenchmark(Benchmark):
         )
 
     @staticmethod
-    def _backend_distribution(result: OrchestrationResult) -> str:
+    def _backend_distribution(result: RoutingPoliciesResult) -> str:
         counts = {
             backend_id: sum(
                 request.metrics.backend_id == backend_id
@@ -510,7 +510,7 @@ class RequestOrchestrationBenchmark(Benchmark):
         return f"CPU:{counts[1]}, GPU:{counts[2]}"
 
     @classmethod
-    def _summary_metrics(cls, result: OrchestrationResult) -> dict[str, float | int]:
+    def _summary_metrics(cls, result: RoutingPoliciesResult) -> dict[str, float | int]:
         ttft_microseconds = tuple(
             cls._required_ttft(request.metrics) for request in result.requests
         )
@@ -555,7 +555,7 @@ class RequestOrchestrationBenchmark(Benchmark):
 
     @staticmethod
     def _backend_table(
-        results_by_case: dict[str, OrchestrationResult],
+        results_by_case: dict[str, RoutingPoliciesResult],
     ) -> str:
         rows = []
         for case in CASES:
@@ -597,7 +597,7 @@ class RequestOrchestrationBenchmark(Benchmark):
     @classmethod
     def _request_table(
         cls,
-        results_by_case: dict[str, OrchestrationResult],
+        results_by_case: dict[str, RoutingPoliciesResult],
     ) -> str:
         rows = []
         for case in CASES:
@@ -635,13 +635,13 @@ class RequestOrchestrationBenchmark(Benchmark):
     @classmethod
     def _report_machine_readable(
         cls,
-        results_by_case: dict[str, OrchestrationResult],
+        results_by_case: dict[str, RoutingPoliciesResult],
     ) -> None:
         for case in CASES:
             result = results_by_case[case.name]
             metrics = cls._summary_metrics(result)
             logger.info(
-                "REQUEST_ORCHESTRATION_RESULT "
+                "REQUEST_ROUTING_POLICIES_RESULT "
                 "case={} policy={} profiles={} backend_requests={} wall_seconds={:.6f} "
                 "output_tokens_per_second={:.6f} median_ttft_ms={:.6f} "
                 "p95_ttft_ms={:.6f} median_e2e_seconds={:.6f} p95_e2e_seconds={:.6f} "
@@ -662,7 +662,7 @@ class RequestOrchestrationBenchmark(Benchmark):
             for request in result.requests:
                 request_metrics = request.metrics
                 logger.info(
-                    "REQUEST_ORCHESTRATION_REQUEST "
+                    "REQUEST_ROUTING_POLICIES_REQUEST "
                     "case={} policy={} profiles={} request={} kind={} input_tokens={} "
                     "output_tokens={} backend_id={} restored_tokens={} prefill_us={} "
                     "decode_us={} ttft_us={} e2e_us={} request_id={} submitted_ms={:.3f}",

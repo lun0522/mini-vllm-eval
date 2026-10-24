@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Aggregate repeated request-orchestration benchmark logs."""
+"""Aggregate repeated request-routing policy benchmark logs."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from tabulate import tabulate
 
 # Use the benchmark's actual manifest rather than maintaining a second workload.
 sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
-from benchmarks.request_orchestration import CASES, CASES_BY_NAME
+from benchmarks.request_routing_policies import CASES, CASES_BY_NAME
 
 CASE_METADATA = {case.name: (case.policy, case.profile_mode) for case in CASES}
 REQUEST_DEFINITIONS = {
@@ -24,7 +24,7 @@ REQUEST_DEFINITIONS = {
 }
 ANSI_ESCAPE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 SUMMARY_ROW = re.compile(
-    r"REQUEST_ORCHESTRATION_RESULT "
+    r"REQUEST_ROUTING_POLICIES_RESULT "
     r"case=(\S+) policy=(\S+) profiles=(\S+) "
     r"backend_requests=cpu:(\d+),gpu:(\d+) wall_seconds=([0-9.]+) "
     r"output_tokens_per_second=([0-9.]+) median_ttft_ms=([0-9.]+) "
@@ -33,18 +33,18 @@ SUMMARY_ROW = re.compile(
     r"unique_restored_tokens=(\d+)"
 )
 REQUEST_ROW = re.compile(
-    r"REQUEST_ORCHESTRATION_REQUEST "
+    r"REQUEST_ROUTING_POLICIES_REQUEST "
     r"case=(\S+) policy=(\S+) profiles=(\S+) request=(\S+) kind=(\S+) "
     r"input_tokens=(\d+) output_tokens=(\d+) backend_id=(\d+) "
     r"restored_tokens=(\d+) prefill_us=(\d+) decode_us=(\d+) "
     r"ttft_us=(\d+) e2e_us=(\d+) request_id=(\d+) submitted_ms=([0-9.]+)"
 )
 REPLAY_ROW = re.compile(
-    r"REQUEST_ORCHESTRATION_REPLAY case=(\S+) version=2 interval_ms=(\d+) "
+    r"REQUEST_ROUTING_POLICIES_REPLAY case=(\S+) version=2 interval_ms=(\d+) "
     r"preprocessing_threads=(\d+) order=(\S+)"
 )
 SEED_ROW = re.compile(
-    r"REQUEST_ORCHESTRATION_SEED case=(\S+) request_id=(\d+) backend_id=(\d+) "
+    r"REQUEST_ROUTING_POLICIES_SEED case=(\S+) request_id=(\d+) backend_id=(\d+) "
     r"input_tokens=(\d+) indexed_tokens=(\d+)"
 )
 ROUTING_ROW = re.compile(
@@ -110,7 +110,7 @@ class RunMeasurements:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Aggregate untraced request-orchestration benchmark logs."
+        description="Aggregate untraced request-routing policy benchmark logs."
     )
     parser.add_argument(
         "logs",
@@ -373,7 +373,7 @@ def _validate_consistent_requests(runs: list[RunMeasurements]) -> None:
 
 
 def _print_results(runs: list[RunMeasurements]) -> None:
-    print(f"Request-orchestration aggregate: {len(runs)} runs")
+    print(f"Request-routing policies aggregate: {len(runs)} runs")
     _print_summary(runs)
     _print_policy_comparison(runs)
     _print_profile_comparison(runs)

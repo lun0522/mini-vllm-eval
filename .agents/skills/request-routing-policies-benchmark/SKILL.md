@@ -1,12 +1,12 @@
 ---
-name: request-orchestration-benchmark
+name: request-routing-policies-benchmark
 description: >-
-  Run and interpret the mini-vllm mixed CPU/GPU request-orchestration benchmark.
+  Run and interpret the mini-vllm mixed CPU/GPU request-routing policy benchmark.
   Use when comparing routing policies, cache affinity, backend distribution, or
   fallback versus workload-specific throughput profiles.
 ---
 
-# Request Orchestration Benchmark
+# Request Routing Policies Benchmark
 
 Run from the `mini-vllm-eval` repository root. The benchmark owns the Qwen2.5
 0.5B model, mixed CPU/GPU backends, F32 activation dtype, paged prefix cache,
@@ -67,7 +67,7 @@ invocation and treat it only as a functional check:
 ```shell
 set -o pipefail
 RUST_LOG=info .venv/bin/python3 main.py \
-  --benchmark request_orchestration 2>&1 | tee BENCHMARK_LOG
+  --benchmark request_routing_policies 2>&1 | tee BENCHMARK_LOG
 ```
 
 For routing diagnostics, explicitly enable `RUST_LOG=info`; the Rust default
@@ -81,7 +81,7 @@ Validate the complete diagnostic log before collecting repetitions:
 
 ```shell
 .venv/bin/python3 \
-  .agents/skills/request-orchestration-benchmark/scripts/untraced_results.py \
+  .agents/skills/request-routing-policies-benchmark/scripts/untraced_results.py \
   BENCHMARK_LOG
 ```
 
@@ -113,14 +113,14 @@ so `tee` cannot hide a benchmark failure:
 ```shell
 set -o pipefail
 RUST_LOG=info .venv/bin/python3 main.py \
-  --benchmark request_orchestration 2>&1 | tee BENCHMARK_LOG
+  --benchmark request_routing_policies 2>&1 | tee BENCHMARK_LOG
 ```
 
 Aggregate the three logs:
 
 ```shell
 .venv/bin/python3 \
-  .agents/skills/request-orchestration-benchmark/scripts/untraced_results.py \
+  .agents/skills/request-routing-policies-benchmark/scripts/untraced_results.py \
   BENCHMARK_LOG_1 BENCHMARK_LOG_2 BENCHMARK_LOG_3
 ```
 
@@ -161,7 +161,7 @@ routing order can be validated in every sample.
 - The seed is intentionally routed by the policy itself. Cache placement and
   subsequent affinity are therefore part of the observed policy behavior, not
   an isolated routing-formula comparison with identical initial cache placement.
-  Record the seed backend and indexed tokens from `REQUEST_ORCHESTRATION_SEED`.
+  Record the seed backend and indexed tokens from `REQUEST_ROUTING_POLICIES_SEED`.
 - Compare load and affinity scenarios separately. A low CPU share is not itself
   a failure: inspect whether CPU could reduce completion time. Do not change
   measured profiles or require a particular policy to win to force a split.

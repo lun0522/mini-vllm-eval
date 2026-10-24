@@ -99,7 +99,7 @@ python3 main.py --benchmark scheduling_policies
 For repeated measurement and interpretation, use the
 `scheduling-policy-benchmark` skill.
 
-### `request_orchestration`
+### `request_routing_policies`
 
 Compare all five mixed CPU/GPU request-routing policies with a concurrent,
 heterogeneous workload containing unique and reusable-prefix requests. The
@@ -107,7 +107,7 @@ same suite also compares the single fallback throughput profile with the full
 measured profile matrix for both estimated-work policies:
 
 ```shell
-python3 main.py --benchmark request_orchestration
+python3 main.py --benchmark request_routing_policies
 ```
 
 The benchmark runs seven server configurations across load-balancing and
@@ -123,7 +123,7 @@ The analyzer validates the estimated-work policies' logged duration scores and
 reports their closest decision margins, helping explain changes in placement.
 
 For repeated measurements and deterministic aggregation, follow the
-[`request-orchestration-benchmark`](.agents/skills/request-orchestration-benchmark/SKILL.md)
+[`request-routing-policies-benchmark`](.agents/skills/request-routing-policies-benchmark/SKILL.md)
 skill.
 
 ### `request_orchestration_capacity`
@@ -131,7 +131,7 @@ skill.
 Compare forcing every measured request to the GPU with mixed CPU/GPU routing
 under **cache-aware least estimated work**. Both cases run in mixed mode.
 Unmeasured benchmark-only requests first place the same approximately 512-token
-prefix in both backend caches. Three workloads then submit 4, 7, or 48 requests
+prefix in both backend caches. Three workloads then submit 4, 8, or 48 requests
 that reuse the prefix and generate 128 tokens each. They represent a GPU-only
 decision, the first calibrated CPU-offload point, and sustained load where CPU
 capacity improves completion time:
