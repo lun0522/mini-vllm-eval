@@ -20,6 +20,9 @@ from benchmarks.speculative_decoding import SpeculativeDecodingBenchmark
 from benchmarks.speculative_sampling_tradeoff import (
     SpeculativeSamplingTradeoffBenchmark,
 )
+from benchmarks.speculative_sampling_proposal_breakeven import (
+    SpeculativeSamplingProposalBreakevenBenchmark,
+)
 
 
 BENCHMARKS = {
@@ -37,4 +40,7 @@ BENCHMARKS = {
     "speculative_decoding_qwen": SpeculativeDecodingBenchmark("qwen"),
     "speculative_decoding_llama": SpeculativeDecodingBenchmark("llama"),
     "speculative_sampling_tradeoff": SpeculativeSamplingTradeoffBenchmark(),
+    "speculative_sampling_proposal_breakeven": (
+        SpeculativeSamplingProposalBreakevenBenchmark()
+    ),
 }

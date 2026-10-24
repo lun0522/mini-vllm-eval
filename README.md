@@ -193,6 +193,25 @@ For repeated measurement and deterministic aggregation, follow the
 [`speculative-sampling-tradeoff-benchmark`](.agents/skills/speculative-sampling-tradeoff-benchmark/SKILL.md)
 skill.
 
+### `speculative_sampling_proposal_breakeven`
+
+Test whether longer fixed proposals overcome speculative-sampling overhead at
+temperature 0.7. The default endpoint pass compares target-only, draft-only,
+and fixed proposal lengths 4, 6, and 8 at TV budget 1. Follow-up invocations
+selectively test lower TV budgets for proposal lengths that beat target-only.
+Every configuration uses the same creative-writing prompt, three seeds, and a
+256-token output limit, and reports complete generated text with latency,
+throughput, acceptance, and verification-round statistics.
+
+```shell
+python3 main.py --benchmark speculative_sampling_proposal_breakeven
+```
+
+For the endpoint-first search procedure, repeated measurements, and
+deterministic aggregation, follow the
+[`speculative-sampling-proposal-breakeven-benchmark`](.agents/skills/speculative-sampling-proposal-breakeven-benchmark/SKILL.md)
+skill.
+
 ### `cpu_activation_dtype`
 
 Compare three CPU activation configurations: F32, unoptimized F16, and F16
