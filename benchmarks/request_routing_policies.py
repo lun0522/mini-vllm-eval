@@ -18,7 +18,7 @@ from tabulate import tabulate
 from benchmarks.base import Benchmark
 from benchmarks.base import BenchmarkCase
 from benchmarks.base import GenerationMetrics
-from benchmarks.base import QWEN_SMALL_MODEL
+from benchmarks.base import QWEN_0_5B_MODEL
 from proto_loader import ProtoModules
 
 
@@ -215,7 +215,7 @@ class RequestRoutingPoliciesBenchmark(Benchmark):
         )
         flags = [
             "--model",
-            QWEN_SMALL_MODEL,
+            QWEN_0_5B_MODEL,
             "--inference-device",
             "mixed",
             "--activation-dtype",

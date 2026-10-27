@@ -16,8 +16,8 @@ from benchmarks.base import Benchmark
 from benchmarks.base import BenchmarkCase
 from benchmarks.base import DraftTokenMetrics
 from benchmarks.base import GenerationMetrics
-from benchmarks.base import QWEN_LARGE_MODEL
-from benchmarks.base import QWEN_SMALL_MODEL
+from benchmarks.base import QWEN_0_5B_MODEL
+from benchmarks.base import QWEN_7B_MODEL
 from benchmarks.speculative_prompts import CREATIVE_WRITING_PROMPT
 from proto_loader import ProtoModules
 
@@ -57,9 +57,9 @@ def _parse_configurations(value: str) -> tuple[Configuration, ...]:
     for raw_item in value.split(","):
         item = raw_item.strip().lower()
         if item == "target":
-            configuration = Configuration("Target only", None, None, QWEN_LARGE_MODEL)
+            configuration = Configuration("Target only", None, None, QWEN_7B_MODEL)
         elif item == "draft":
-            configuration = Configuration("Draft only", None, None, QWEN_SMALL_MODEL)
+            configuration = Configuration("Draft only", None, None, QWEN_0_5B_MODEL)
         else:
             length_text, separator, budget_text = item.partition(":")
             if not separator:
@@ -72,7 +72,7 @@ def _parse_configurations(value: str) -> tuple[Configuration, ...]:
                 f"Fixed {length} / TV={budget:g}",
                 length,
                 budget,
-                QWEN_LARGE_MODEL,
+                QWEN_7B_MODEL,
             )
         if any(existing.name == configuration.name for existing in configurations):
             raise ValueError(f"duplicate follow-up configuration: {configuration.name}")
@@ -107,7 +107,7 @@ class SpeculativeSamplingProposalBreakevenBenchmark(Benchmark):
         ]
 
     def server_flags(self) -> list[str]:
-        return self._server_flags(QWEN_LARGE_MODEL)
+        return self._server_flags(QWEN_7B_MODEL)
 
     def cases(self) -> tuple[BenchmarkCase, ...]:
         cases = []
@@ -115,7 +115,7 @@ class SpeculativeSamplingProposalBreakevenBenchmark(Benchmark):
             flags = self._server_flags(configuration.model)
             if configuration.proposal_length is not None:
                 draft_model = (
-                    f"model {{ {QWEN_SMALL_MODEL} }} token_count_policy {{ fixed {{ "
+                    f"model {{ {QWEN_0_5B_MODEL} }} token_count_policy {{ fixed {{ "
                     f"draft_token_count: {configuration.proposal_length} }} }}"
                 )
                 flags.extend(("--draft-model", draft_model))

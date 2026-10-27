@@ -13,7 +13,7 @@ from tabulate import tabulate
 from benchmarks.base import Benchmark
 from benchmarks.base import BenchmarkCase
 from benchmarks.base import GenerationMetrics
-from benchmarks.base import QWEN_SMALL_MODEL
+from benchmarks.base import QWEN_0_5B_MODEL
 from benchmarks.example_prompts import EXAMPLE_LONG_PROMPT_1
 from benchmarks.example_prompts import EXAMPLE_SHORT_PROMPT_1
 from benchmarks.example_prompts import EXAMPLE_SHORT_PROMPT_2
@@ -53,7 +53,7 @@ class CpuActivationDtypeBenchmark(Benchmark):
     def server_flags(self) -> list[str]:
         return [
             "--model",
-            QWEN_SMALL_MODEL,
+            QWEN_0_5B_MODEL,
             "--inference-device",
             "cpu",
             "--scheduler-config",

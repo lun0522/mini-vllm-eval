@@ -14,7 +14,7 @@ from tabulate import tabulate
 from benchmarks.base import Benchmark
 from benchmarks.base import BenchmarkCase
 from benchmarks.base import GenerationMetrics
-from benchmarks.base import QWEN_SMALL_MODEL
+from benchmarks.base import QWEN_0_5B_MODEL
 from proto_loader import ProtoModules
 
 
@@ -104,7 +104,7 @@ class BackendThroughputProfilesBenchmark(Benchmark):
     def server_flags(self) -> list[str]:
         return [
             "--model",
-            QWEN_SMALL_MODEL,
+            QWEN_0_5B_MODEL,
             "--activation-dtype",
             "f32",
             "--kv-cache-config",

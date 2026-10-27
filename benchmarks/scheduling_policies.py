@@ -18,7 +18,7 @@ from tabulate import tabulate
 from benchmarks.base import Benchmark
 from benchmarks.base import BenchmarkCase
 from benchmarks.base import GenerationMetrics
-from benchmarks.base import QWEN_LARGE_MODEL
+from benchmarks.base import QWEN_7B_MODEL
 from benchmarks.example_prompts import EXAMPLE_LONG_PROMPTS
 from benchmarks.example_prompts import EXAMPLE_SHORT_PROMPTS
 from proto_loader import ProtoModules
@@ -157,7 +157,7 @@ class SchedulingPoliciesBenchmark(Benchmark):
         scheduling_policy = f"SCHEDULING_POLICY_{policy.upper().replace('-', '_')}"
         return [
             "--model",
-            QWEN_LARGE_MODEL,
+            QWEN_7B_MODEL,
             "--kv-cache-config",
             (
                 "kv_cache_type: KV_CACHE_TYPE_PAGED per_page_token_count: 16 "

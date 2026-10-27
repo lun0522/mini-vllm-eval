@@ -16,7 +16,7 @@ from tabulate import tabulate
 from benchmarks.base import Benchmark
 from benchmarks.base import BenchmarkCase
 from benchmarks.base import GenerationMetrics
-from benchmarks.base import QWEN_SMALL_MODEL
+from benchmarks.base import QWEN_0_5B_MODEL
 from proto_loader import ProtoModules
 
 
@@ -146,7 +146,7 @@ class PrefixCacheConcurrentPopulationBenchmark(Benchmark):
         )
         return [
             "--model",
-            QWEN_SMALL_MODEL,
+            QWEN_0_5B_MODEL,
             "--kv-cache-config",
             (
                 "kv_cache_type: KV_CACHE_TYPE_PAGED_PREFIX "

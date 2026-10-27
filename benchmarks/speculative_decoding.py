@@ -13,10 +13,10 @@ from benchmarks.base import Benchmark
 from benchmarks.base import BenchmarkCase
 from benchmarks.base import DraftTokenMetrics
 from benchmarks.base import GenerationMetrics
-from benchmarks.base import LLAMA_LARGE_MODEL
-from benchmarks.base import LLAMA_SMALL_MODEL
-from benchmarks.base import QWEN_LARGE_MODEL
-from benchmarks.base import QWEN_SMALL_MODEL
+from benchmarks.base import LLAMA_1B_MODEL
+from benchmarks.base import LLAMA_8B_MODEL
+from benchmarks.base import QWEN_0_5B_MODEL
+from benchmarks.base import QWEN_7B_MODEL
 from benchmarks.example_prompts import EXAMPLE_SHORT_PROMPT_1
 from benchmarks.speculative_prompts import CODE_REFACTORING_PROMPT
 from benchmarks.speculative_prompts import CREATIVE_WRITING_PROMPT
@@ -42,8 +42,8 @@ GPU_ENVIRONMENT = (
     ("MINI_VLLM_METAL_GEMV_MAX_ROWS", "4"),
 )
 MODEL_FAMILIES = {
-    "qwen": (QWEN_LARGE_MODEL, QWEN_SMALL_MODEL),
-    "llama": (LLAMA_LARGE_MODEL, LLAMA_SMALL_MODEL),
+    "qwen": (QWEN_7B_MODEL, QWEN_0_5B_MODEL),
+    "llama": (LLAMA_8B_MODEL, LLAMA_1B_MODEL),
 }
 
 

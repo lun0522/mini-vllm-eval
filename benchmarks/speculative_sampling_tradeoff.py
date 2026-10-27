@@ -14,8 +14,8 @@ from benchmarks.base import Benchmark
 from benchmarks.base import BenchmarkCase
 from benchmarks.base import DraftTokenMetrics
 from benchmarks.base import GenerationMetrics
-from benchmarks.base import QWEN_LARGE_MODEL
-from benchmarks.base import QWEN_SMALL_MODEL
+from benchmarks.base import QWEN_0_5B_MODEL
+from benchmarks.base import QWEN_7B_MODEL
 from benchmarks.speculative_prompts import CREATIVE_WRITING_PROMPT
 from proto_loader import ProtoModules
 
@@ -74,7 +74,7 @@ class SpeculativeSamplingTradeoffBenchmark(Benchmark):
     def _server_flags() -> list[str]:
         return [
             "--model",
-            QWEN_LARGE_MODEL,
+            QWEN_7B_MODEL,
             "--kv-cache-config",
             (
                 "kv_cache_type: KV_CACHE_TYPE_CONTIGUOUS "
@@ -91,7 +91,7 @@ class SpeculativeSamplingTradeoffBenchmark(Benchmark):
     def cases(self) -> tuple[BenchmarkCase, ...]:
         common_flags = tuple(self.server_flags())
         draft_model = (
-            f"model {{ {QWEN_SMALL_MODEL} }} token_count_policy {{ fixed {{ "
+            f"model {{ {QWEN_0_5B_MODEL} }} token_count_policy {{ fixed {{ "
             f"draft_token_count: {DRAFT_TOKEN_COUNT} }} }}"
         )
         return (

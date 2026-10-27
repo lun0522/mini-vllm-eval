@@ -35,7 +35,11 @@ BENCHMARKS = {
     "prefix_cache_concurrent_population": PrefixCacheConcurrentPopulationBenchmark(),
     "request_routing_policies": RequestRoutingPoliciesBenchmark(),
     "request_orchestration_capacity": RequestOrchestrationCapacityBenchmark(),
-    "simple_generation": SimpleGenerationBenchmark(),
+    "simple_generation_qwen_0_5b": SimpleGenerationBenchmark("qwen_0_5b"),
+    "simple_generation_qwen_7b": SimpleGenerationBenchmark("qwen_7b"),
+    "simple_generation_qwen_0_5b_draft_7b_target": SimpleGenerationBenchmark(
+        "qwen_0_5b_draft_7b_target"
+    ),
     "scheduling_policies": SchedulingPoliciesBenchmark(),
     "speculative_decoding_qwen": SpeculativeDecodingBenchmark("qwen"),
     "speculative_decoding_llama": SpeculativeDecodingBenchmark("llama"),

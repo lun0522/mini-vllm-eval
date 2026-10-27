@@ -30,10 +30,13 @@ cases on Linux. The engine's committed lockfile is always used.
 
 ### `simple_generation`
 
-Generate one response and print its streamed output:
+Generate one response and print its streamed output. Select the 0.5B target,
+the 7B target, or the 0.5B draft with 7B target:
 
 ```shell
-python3 main.py --benchmark simple_generation
+python3 main.py --benchmark simple_generation_qwen_0_5b
+python3 main.py --benchmark simple_generation_qwen_7b
+python3 main.py --benchmark simple_generation_qwen_0_5b_draft_7b_target
 ```
 
 ### `backend_throughput_profiles`
@@ -245,7 +248,7 @@ python3 .agents/skills/activation-dtype-benchmark/scripts/activation_traces.py \
   /tmp/mini-vllm-activation-traces/f16-qmatmul/model-runner-TIMESTAMP.json
 ```
 
-### `cpu_paged_attention_f32`
+### `cpu_paged_attention`
 
 Compare contiguous and paged CPU attention with repeated-KV/grouped-Q and
 concatenated/page-wise value matmul:
@@ -253,8 +256,6 @@ concatenated/page-wise value matmul:
 ```shell
 python3 main.py --benchmark cpu_paged_attention_f32
 ```
-
-### `cpu_paged_attention_f16`
 
 Test the same attention configurations with F16 activations:
 

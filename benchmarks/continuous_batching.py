@@ -18,8 +18,8 @@ from benchmarks.base import Benchmark
 from benchmarks.base import BenchmarkCase
 from benchmarks.base import DraftTokenMetrics
 from benchmarks.base import GenerationMetrics
-from benchmarks.base import QWEN_LARGE_MODEL
-from benchmarks.base import QWEN_SMALL_DRAFT_MODEL
+from benchmarks.base import QWEN_0_5B_MODEL
+from benchmarks.base import QWEN_7B_MODEL
 from benchmarks.example_prompts import EXAMPLE_LONG_PROMPTS
 from benchmarks.example_prompts import EXAMPLE_SHORT_PROMPTS
 from proto_loader import ProtoModules
@@ -169,9 +169,12 @@ class ContinuousBatchingBenchmark(Benchmark):
     def _server_flags(max_active_request_count: int) -> list[str]:
         return [
             "--model",
-            QWEN_LARGE_MODEL,
+            QWEN_7B_MODEL,
             "--draft-model",
-            QWEN_SMALL_DRAFT_MODEL,
+            (
+                f"model {{ {QWEN_0_5B_MODEL} }} "
+                "token_count_policy { fixed { draft_token_count: 4 } }"
+            ),
             "--kv-cache-config",
             (
                 "kv_cache_type: KV_CACHE_TYPE_PAGED per_page_token_count: 16 "

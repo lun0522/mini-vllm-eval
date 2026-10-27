@@ -20,28 +20,24 @@ from mini_vllm import wait_for_server
 from proto_loader import ProtoModules
 
 
-QWEN_LARGE_MODEL = (
-    'model_id: "bartowski/Qwen2.5-7B-Instruct-GGUF" '
-    'model_filename: "Qwen2.5-7B-Instruct-Q4_K_M.gguf" '
-    'tokenizer_id: "Qwen/Qwen2.5-7B-Instruct"'
-)
-QWEN_SMALL_MODEL = (
+QWEN_0_5B_MODEL = (
     'model_id: "bartowski/Qwen2.5-0.5B-Instruct-GGUF" '
     'model_filename: "Qwen2.5-0.5B-Instruct-Q4_K_M.gguf" '
     'tokenizer_id: "Qwen/Qwen2.5-7B-Instruct"'
 )
-QWEN_SMALL_DRAFT_MODEL = (
-    f"model {{ {QWEN_SMALL_MODEL} }} "
-    "token_count_policy { fixed { draft_token_count: 4 } }"
+QWEN_7B_MODEL = (
+    'model_id: "bartowski/Qwen2.5-7B-Instruct-GGUF" '
+    'model_filename: "Qwen2.5-7B-Instruct-Q4_K_M.gguf" '
+    'tokenizer_id: "Qwen/Qwen2.5-7B-Instruct"'
 )
-LLAMA_LARGE_MODEL = (
-    'model_id: "bartowski/Meta-Llama-3.1-8B-Instruct-GGUF" '
-    'model_filename: "Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf" '
-    'tokenizer_id: "meta-llama/Meta-Llama-3.1-8B-Instruct"'
-)
-LLAMA_SMALL_MODEL = (
+LLAMA_1B_MODEL = (
     'model_id: "bartowski/Llama-3.2-1B-Instruct-GGUF" '
     'model_filename: "Llama-3.2-1B-Instruct-Q4_K_M.gguf" '
+    'tokenizer_id: "meta-llama/Meta-Llama-3.1-8B-Instruct"'
+)
+LLAMA_8B_MODEL = (
+    'model_id: "bartowski/Meta-Llama-3.1-8B-Instruct-GGUF" '
+    'model_filename: "Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf" '
     'tokenizer_id: "meta-llama/Meta-Llama-3.1-8B-Instruct"'
 )
 
