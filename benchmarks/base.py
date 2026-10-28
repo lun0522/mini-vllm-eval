@@ -92,11 +92,12 @@ class Benchmark(ABC):
         case: BenchmarkCase,
         trace_directory: Path | None = None,
     ) -> list[str]:
-        inference_device = "gpu"
-        if "--inference-device" in case.server_flags:
-            option_index = case.server_flags.index("--inference-device")
+        inference_devices = []
+        for option_index, flag in enumerate(case.server_flags):
+            if flag != "--inference-device":
+                continue
             try:
-                inference_device = case.server_flags[option_index + 1]
+                inference_devices.append(case.server_flags[option_index + 1])
             except IndexError as error:
                 raise ValueError("--inference-device requires a value") from error
 
@@ -107,7 +108,7 @@ class Benchmark(ABC):
             "--locked",
             "--no-default-features",
         ]
-        if inference_device != "cpu":
+        if any(device != "cpu" for device in inference_devices or ["gpu"]):
             if sys.platform == "darwin":
                 backend_feature = "metal"
             elif sys.platform.startswith("linux"):

@@ -41,10 +41,10 @@ python3 main.py --benchmark simple_generation_qwen_0_5b_draft_7b_target
 
 ### `backend_throughput_profiles`
 
-Measure isolated CPU and GPU execution throughput across the twelve
-combinations of 128, 512, and 2048 input tokens with 16, 128, 512, and 1024
-maximum output tokens using Qwen2.5 0.5B. Each combination has three measured
-runs per backend. The benchmark reports prefill and decode timings and derives
+Measure isolated CPU and GPU execution throughput across the twelve combinations
+of 128, 512, and 2048 input tokens with 16, 128, 512, and 1024 maximum output
+tokens using Qwen2.5 0.5B. Each combination has three measured runs per backend.
+The benchmark reports prefill and decode timings and derives
 request-orchestrator throughput profiles:
 
 ```shell
@@ -70,9 +70,9 @@ skill.
 
 ### `prefix_cache_concurrent_population`
 
-Compare completion and incremental prefix publication with independent
-execution and exact-input single-flight released at request completion or
-prefix publication, using cold bursts and in-flight fan-out:
+Compare completion and incremental prefix publication with independent execution
+and exact-input single-flight released at request completion or prefix
+publication, using cold bursts and in-flight fan-out:
 
 ```shell
 python3 main.py --benchmark prefix_cache_concurrent_population
@@ -123,9 +123,9 @@ and 336 measured requests. Requests start 50 ms apart with one preprocessing
 worker; response consumption remains concurrent. The schedules use the same
 requests but swap round-robin parity. Short-context backlog requests create
 offloading opportunities without repeating the previous long-decode workload.
-Results include wall time,
-output throughput, latency percentiles, prefix-cache restoration, and
-per-backend request and token distributions.
+Results include wall time, output throughput, latency percentiles, prefix-cache
+restoration, and per-backend request and token distributions.
+
 The analyzer validates the estimated-work policies' logged duration scores and
 reports their closest decision margins, helping explain changes in placement.
 
@@ -136,7 +136,9 @@ skill.
 ### `request_orchestration_capacity`
 
 Compare forcing every measured request to the GPU with mixed CPU/GPU routing
-under **cache-aware least estimated work**. Both cases run in mixed mode.
+under **cache-aware least estimated work**. Both cases start with CPU and GPU
+backends enabled.
+
 Unmeasured benchmark-only requests first place the same approximately 512-token
 prefix in both backend caches. Three workloads then submit 4, 8, or 48 requests
 that reuse the prefix and generate 128 tokens each. They represent a GPU-only
@@ -220,10 +222,9 @@ skill.
 Compare three CPU activation configurations: F32, unoptimized F16, and F16
 using quantized matmul via F32. Each case uses a short one-token warm-up, a
 distinct short-prompt request producing one token, and a long-prompt request
-producing 1024 tokens. This exposes both
-small- and large-prefill behavior, long-context decoding, and memory use. All
-cases allocate equal KV-cache token capacity by giving F16 half the F32 byte
-budget.
+producing 1024 tokens. This exposes both small- and large-prefill behavior,
+long-context decoding, and memory use. All cases allocate equal KV-cache token
+capacity by giving F16 half the F32 byte budget.
 
 ```shell
 python3 main.py --benchmark cpu_activation_dtype

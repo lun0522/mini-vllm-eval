@@ -52,7 +52,7 @@ WORKLOADS = (
     WorkloadDefinition("saturated", 48),
 )
 ROUTING_MODES = (
-    # In mixed mode backend 2 is GPU; zero leaves selection to the orchestrator.
+    # Backend 2 is GPU; zero leaves selection to the orchestrator.
     ("forced_gpu", 2),
     ("mixed_routing", 0),
 )
@@ -118,7 +118,9 @@ class RequestOrchestrationCapacityBenchmark(Benchmark):
             "--model",
             QWEN_0_5B_MODEL,
             "--inference-device",
-            "mixed",
+            "cpu",
+            "--inference-device",
+            "gpu",
             "--activation-dtype",
             "f32",
             "--input-preprocessing-thread-count",
