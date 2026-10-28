@@ -30,13 +30,24 @@ cases on Linux. The engine's committed lockfile is always used.
 
 ### `simple_generation`
 
-Generate one response and print its streamed output. Select the 0.5B target,
-the 7B target, or the 0.5B draft with 7B target:
+Generate one response and print its streamed output. Select the model with
+`--model-variation`:
 
 ```shell
-python3 main.py --benchmark simple_generation_qwen_0_5b
-python3 main.py --benchmark simple_generation_qwen_7b
-python3 main.py --benchmark simple_generation_qwen_0_5b_draft_7b_target
+python3 main.py --benchmark simple_generation --model-variation qwen_0_5b
+python3 main.py --benchmark simple_generation --model-variation qwen_7b
+python3 main.py --benchmark simple_generation --model-variation qwen_0_5b_draft_7b_target
+```
+
+### `concurrent_generation`
+
+Send the requested number of long-prompt generation requests concurrently,
+round-robin over the example prompts, using two GPU devices. Outputs are printed
+after the requests complete:
+
+```shell
+python3 main.py --benchmark concurrent_generation --num-requests 4
+python3 main.py --benchmark concurrent_generation --num-requests 4 --model-variation qwen_7b
 ```
 
 ### `backend_throughput_profiles`

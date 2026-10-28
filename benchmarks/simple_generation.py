@@ -23,7 +23,9 @@ MODEL_VARIATIONS = {
 
 
 class SimpleGenerationBenchmark(Benchmark):
-    def __init__(self, model_variation: str = "qwen_0_5b") -> None:
+    DEFAULT_MODEL_VARIATION = "qwen_0_5b"
+
+    def __init__(self, model_variation: str = DEFAULT_MODEL_VARIATION) -> None:
         try:
             self.target_model, self.draft_model = MODEL_VARIATIONS[model_variation]
         except KeyError as error:

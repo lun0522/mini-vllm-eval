@@ -12,6 +12,9 @@ from pathlib import Path
 from loguru import logger
 
 from benchmarks import BENCHMARKS
+from benchmarks.concurrent_generation import ConcurrentGenerationBenchmark
+from benchmarks.simple_generation import MODEL_VARIATIONS
+from benchmarks.simple_generation import SimpleGenerationBenchmark
 from mini_vllm import clear_server_sockets
 from mini_vllm import stop_server
 from proto_loader import generate_proto_modules
@@ -34,6 +37,18 @@ def parse_args() -> argparse.Namespace:
         help="benchmark to run",
     )
     parser.add_argument(
+        "--num-requests",
+        type=int,
+        default=None,
+        help="number of concurrent requests for concurrent_generation",
+    )
+    parser.add_argument(
+        "--model-variation",
+        choices=tuple(MODEL_VARIATIONS),
+        default=None,
+        help="model variation for simple_generation or concurrent_generation",
+    )
+    parser.add_argument(
         "--trace-directory",
         type=Path,
         help="directory where the model runner writes a Chrome trace",
@@ -48,6 +63,28 @@ def main() -> int:
         available_benchmarks = ", ".join(BENCHMARKS)
         raise SystemExit(
             f"Unknown benchmark: {args.benchmark}. Available benchmarks: {available_benchmarks}"
+        )
+    if args.benchmark == "simple_generation":
+        model_variation = (
+            args.model_variation
+            if args.model_variation is not None
+            else SimpleGenerationBenchmark.DEFAULT_MODEL_VARIATION
+        )
+        benchmark = SimpleGenerationBenchmark(model_variation)
+    elif args.benchmark == "concurrent_generation":
+        num_requests = (
+            args.num_requests
+            if args.num_requests is not None
+            else ConcurrentGenerationBenchmark.DEFAULT_NUM_REQUESTS
+        )
+        model_variation = (
+            args.model_variation
+            if args.model_variation is not None
+            else ConcurrentGenerationBenchmark.DEFAULT_MODEL_VARIATION
+        )
+        benchmark = ConcurrentGenerationBenchmark(
+            num_requests,
+            model_variation,
         )
     repository = args.repo_path.expanduser().resolve()
     trace_directory = (

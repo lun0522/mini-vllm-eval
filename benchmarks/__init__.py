@@ -4,6 +4,7 @@ from benchmarks.backend_throughput_profiles import (
     BackendThroughputProfilesBenchmark,
 )
 from benchmarks.continuous_batching import ContinuousBatchingBenchmark
+from benchmarks.concurrent_generation import ConcurrentGenerationBenchmark
 from benchmarks.cpu_activation_dtype import CpuActivationDtypeBenchmark
 from benchmarks.cpu_paged_attention import CpuPagedAttentionBenchmark
 from benchmarks.prefix_cache_reuse import PrefixCacheReuseBenchmark
@@ -28,6 +29,7 @@ from benchmarks.speculative_sampling_proposal_breakeven import (
 BENCHMARKS = {
     "backend_throughput_profiles": BackendThroughputProfilesBenchmark(),
     "continuous_batching": ContinuousBatchingBenchmark(),
+    "concurrent_generation": ConcurrentGenerationBenchmark(),
     "cpu_activation_dtype": CpuActivationDtypeBenchmark(),
     "cpu_paged_attention_f32": CpuPagedAttentionBenchmark("f32"),
     "cpu_paged_attention_f16": CpuPagedAttentionBenchmark("f16"),
@@ -35,11 +37,7 @@ BENCHMARKS = {
     "prefix_cache_concurrent_population": PrefixCacheConcurrentPopulationBenchmark(),
     "request_routing_policies": RequestRoutingPoliciesBenchmark(),
     "request_orchestration_capacity": RequestOrchestrationCapacityBenchmark(),
-    "simple_generation_qwen_0_5b": SimpleGenerationBenchmark("qwen_0_5b"),
-    "simple_generation_qwen_7b": SimpleGenerationBenchmark("qwen_7b"),
-    "simple_generation_qwen_0_5b_draft_7b_target": SimpleGenerationBenchmark(
-        "qwen_0_5b_draft_7b_target"
-    ),
+    "simple_generation": SimpleGenerationBenchmark(),
     "scheduling_policies": SchedulingPoliciesBenchmark(),
     "speculative_decoding_qwen": SpeculativeDecodingBenchmark("qwen"),
     "speculative_decoding_llama": SpeculativeDecodingBenchmark("llama"),
